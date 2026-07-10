@@ -1,0 +1,18 @@
+{
+  "vsn": "V999",
+  "name": "000000000000FADE",
+  "phase": null,
+  "project": "SGT",
+  "address": "",
+  "gps_lat": null,
+  "gps_lon": null,
+  "modem": null,
+  "tags": [],
+  "computes": [
+    { "name": "agx-thor", "is_active": true, "serial_no": "000000000FADE", "zone": "core",
+      "hardware": { "hw_model": "agx-thor", "capabilities": ["gpu", "arm64"] } }
+  ],
+  "sensors": [],
+  "resources": [],
+  "lorawanconnections": []
+}

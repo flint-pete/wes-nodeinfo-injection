@@ -1,0 +1,25 @@
+--- a/pkg/nodescheduler/resourcemanager.go	2026-07-09 20:33:59.923867894 -0500
++++ b/pkg/nodescheduler/resourcemanager.go	2026-07-09 20:34:30.134853477 -0500
+@@ -881,8 +881,20 @@
+ 			Image:           pr.Plugin.PluginSpec.Image,
+ 			Args:            pr.Plugin.PluginSpec.Args,
+ 			Env:             envs,
+-			Resources:       resources,
+-			VolumeMounts:    volumeMounts,
++			// Project the existing wes-identity ConfigMap so plugins can read node
++			// identity/GPS at runtime (pywaggle2 get_node_info). It carries
++			// WAGGLE_NODE_{ID,VSN,GPS_LAT,GPS_LON,MOBILITY}. Optional=true so a node
++			// whose WES has not (yet) created the ConfigMap still schedules plugins.
++			// EnvFrom is applied UNDER container.Env, so any explicit Env var of the
++			// same name still wins (preserves the "user env first" precedence above).
++			EnvFrom: []apiv1.EnvFromSource{
++				{ConfigMapRef: &apiv1.ConfigMapEnvSource{
++					LocalObjectReference: apiv1.LocalObjectReference{Name: "wes-identity"},
++					Optional:             booltoPtr(true),
++				}},
++			},
++			Resources:    resources,
++			VolumeMounts: volumeMounts,
+ 		},
+ 	}
+ 

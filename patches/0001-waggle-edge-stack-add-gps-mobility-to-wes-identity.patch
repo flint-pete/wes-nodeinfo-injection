@@ -1,0 +1,24 @@
+--- a/kubernetes/update-stack.sh	2026-07-09 20:33:59.923211332 -0500
++++ b/kubernetes/update-stack.sh	2026-07-09 20:34:14.308144217 -0500
+@@ -197,9 +197,21 @@
+     # NOTE we are ignoring the WAGGLE_NODE_ID in waggle-config and creating from local file
+     WAGGLE_NODE_ID=$(node_id)
+     WAGGLE_NODE_VSN=$(node_vsn)
++    # node GPS + mobility, read from the manifest so pywaggle2 can expose them to
++    # plugins (get_node_info). Sentinels when absent/null: lat/lon->999 (off-globe;
++    # 0 is a REAL coord = Null Island), mobility->"" (pywaggle2 normalizes ->unknown).
++    # NOTE: `mobility` is not yet a manifest field (proposed; default "static"); until
++    # it lands this yields the empty sentinel, which pywaggle2 reads as "unknown".
++    _manifest="${WAGGLE_CONFIG_DIR}/${NODE_MANIFEST_V2}"
++    WAGGLE_NODE_GPS_LAT=$(jq -r '(.gps_lat) // "999"' "${_manifest}" 2>/dev/null || echo 999)
++    WAGGLE_NODE_GPS_LON=$(jq -r '(.gps_lon) // "999"' "${_manifest}" 2>/dev/null || echo 999)
++    WAGGLE_NODE_MOBILITY=$(jq -r '(.mobility) // ""' "${_manifest}" 2>/dev/null || echo "")
+     cat > configs/wes-identity.env <<EOF
+ WAGGLE_NODE_ID=${WAGGLE_NODE_ID}
+ WAGGLE_NODE_VSN=${WAGGLE_NODE_VSN}
++WAGGLE_NODE_GPS_LAT=${WAGGLE_NODE_GPS_LAT}
++WAGGLE_NODE_GPS_LON=${WAGGLE_NODE_GPS_LON}
++WAGGLE_NODE_MOBILITY=${WAGGLE_NODE_MOBILITY}
+ EOF
+ 
+     # copy over the (potentially) updated node manifest

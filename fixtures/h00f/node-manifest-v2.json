@@ -1,0 +1,32 @@
+{
+  "vsn": "H00F",
+  "name": "00004CBB4701D16C",
+  "phase": "Deployed",
+  "project": "SGT",
+  "address": "Argonne\r\n9700 South Cass Ave, Lemont, IL 60439",
+  "gps_lat": 41.7179852752395,
+  "gps_lon": -87.98271513806043,
+  "modem": null,
+  "tags": [],
+  "computes": [
+    {
+      "name": "agx-thor",
+      "is_active": true,
+      "serial_no": "01234567890AB",
+      "zone": "core",
+      "hardware": { "hardware": "nvidia-thor-agx-devkit", "hw_model": "agx-thor", "capabilities": ["gpu", "arm64"] }
+    }
+  ],
+  "sensors": [
+    {
+      "name": "ptz",
+      "is_active": true,
+      "scope": "global",
+      "serial_no": "",
+      "uri": "http://10.31.81.10/stw-cgi/video.cgi?msubmenu=snapshot&action=view",
+      "hardware": { "hw_model": "XNV-8081Z", "manufacturer": "Hanwha", "capabilities": ["camera"] }
+    }
+  ],
+  "resources": [],
+  "lorawanconnections": []
+}

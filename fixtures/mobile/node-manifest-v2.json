@@ -1,0 +1,16 @@
+{
+  "vsn": "M001",
+  "name": "000000000000BEEF",
+  "phase": "Deployed",
+  "project": "SGT",
+  "address": "mobile platform",
+  "gps_lat": 41.5,
+  "gps_lon": -88.0,
+  "mobility": "mobile",
+  "modem": null,
+  "tags": [],
+  "computes": [],
+  "sensors": [],
+  "resources": [],
+  "lorawanconnections": []
+}

@@ -1,0 +1,10 @@
+# upstream clones (re-created via git clone; see README). Deliverable is patches/.
+.upstream/
+
+# Go build/test artifacts
+scheduler-change/*.test
+*.out
+
+# python
+__pycache__/
+*.pyc
