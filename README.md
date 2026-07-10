@@ -76,3 +76,9 @@ self-contained.
 - both patches **apply clean** to pristine upstream HEAD
 
 See `HANDOFF.md` for the exact diffs and what's CI-owned vs done.
+
+## Testing on a real node before upstream merge
+
+`node-test/` has side-load scripts (Tier 1: ConfigMap-only, safe; Tier 2: patched
+scheduler) to install the change on H00F/any node, test pywaggle2 `get_node_info()`
+on real hardware, then restore. See `node-test/README.md`.

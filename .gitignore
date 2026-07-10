@@ -1,6 +1,9 @@
 # upstream clones (re-created via git clone; see README). Deliverable is patches/.
 .upstream/
 
+# node-test backups (written on-node during side-load; never commit cluster state)
+node-test/.node-backup/
+
 # Go build/test artifacts
 scheduler-change/*.test
 *.out

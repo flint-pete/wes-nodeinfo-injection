@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# test-add-scheduler.sh -- TIER 2 (higher blast radius: replaces the control-plane
+# scheduler). Builds edge-scheduler WITH patch 0002 applied, side-loads it into k3s
+# containerd (podman build + k3s ctr import -- the ECR builder is broken, Infra #2),
+# and points the wes-plugin-scheduler Deployment at the side-loaded image. Then ANY
+# normally-scheduled plugin (no envFrom in its own spec) gets wes-identity injected.
+#
+# PREREQ: run Tier 1's test-add-configmap.sh FIRST so wes-identity actually carries
+# the 5 vars -- otherwise the scheduler injects an envFrom to a CM without gps/mobility.
+#
+# Revert with test-remove-scheduler.sh (restores the original Deployment image).
+# Run ON the node. Requires: podman, k3s, git, go (to build), sudo kubectl.
+set -euo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib.sh
+source "$HERE/lib.sh"
+REPO="$(cd "$HERE/.." && pwd)"
+
+need "$KUBECTL"; need podman; need git
+TAG="${TAG:-localhost/edge-scheduler:nodeinfo-test}"
+K3S_TAG="docker.io/library/edge-scheduler:nodeinfo-test"
+SRC="${SCHEDULER_SRC:-$REPO/.upstream/edge-scheduler}"
+
+[ -d "$SRC" ] || fatal "edge-scheduler source not found at $SRC (see README: populate .upstream/)"
+
+# 0. sanity: is patch 0002 actually applied in $SRC? (grep for our marker)
+if ! grep -q 'wes-identity' "$SRC/pkg/nodescheduler/resourcemanager.go"; then
+  fatal "patch 0002 not applied in $SRC -- run: git -C $SRC apply $REPO/patches/0002-*.patch"
+fi
+log "patch 0002 confirmed present in scheduler source"
+
+# 1. build the patched scheduler image natively (podman; RUN works on-node)
+log "building $TAG (podman, native) ..."
+( cd "$SRC" && podman build -t "$TAG" . ) || fatal "podman build failed"
+
+# 2. import into k3s containerd (separate store from podman)
+log "importing image into k3s containerd ..."
+podman save "$TAG" | sudo k3s ctr images import - >/dev/null
+sudo k3s ctr images tag "$TAG" "$K3S_TAG" 2>/dev/null || true
+
+# 3. back up + patch the scheduler Deployment to the side-loaded image
+backup_resource deployment "$SCHED_DEPLOY"
+log "pointing $SCHED_DEPLOY at $K3S_TAG (imagePullPolicy=IfNotPresent)"
+kc -n "$NS_DEFAULT" set image "deployment/$SCHED_DEPLOY" "*=$K3S_TAG"
+kc -n "$NS_DEFAULT" patch "deployment/$SCHED_DEPLOY" --type=json \
+  -p='[{"op":"replace","path":"/spec/template/spec/containers/0/imagePullPolicy","value":"IfNotPresent"}]' >/dev/null
+
+log "waiting for scheduler rollout ..."
+if ! kc -n "$NS_DEFAULT" rollout status "deployment/$SCHED_DEPLOY" --timeout=120s; then
+  warn "rollout did not go Ready -- REVERTING to avoid a stalled control plane"
+  restore_resource deployment "$SCHED_DEPLOY"
+  fatal "scheduler rollout failed; reverted."
+fi
+log "patched scheduler is running."
+echo "-------------------------------------------------------------"
+log "now schedule any normal plugin (e.g. via pluginctl/sesctl) WITHOUT envFrom in"
+log "its spec, then check it gets wes-identity injected:"
+log "  $KUBECTL get pod <plugin> -o jsonpath='{.spec.containers[0].envFrom}'"
+log "when done:  ./test-remove-scheduler.sh"
