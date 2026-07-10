@@ -82,3 +82,6 @@ See `HANDOFF.md` for the exact diffs and what's CI-owned vs done.
 `node-test/` has side-load scripts (Tier 1: ConfigMap-only, safe; Tier 2: patched
 scheduler) to install the change on H00F/any node, test pywaggle2 `get_node_info()`
 on real hardware, then restore. See `node-test/README.md`.
+
+Full operator guide — instructions, rationale, and risk analysis — is in
+`TESTING.md`.
