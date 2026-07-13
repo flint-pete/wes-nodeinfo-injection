@@ -8,7 +8,7 @@
 # the three fields pywaggle2's node-info accessor needs -- GPS lat/lon + mobility --
 # read from the node manifest, in the SAME env-var style as the existing two.
 #
-# Design refs: ~/AI-projects/pywaggle2-design.md sec 2.4.3 (env scalars) + 2.4.4
+# Design refs: ~/AI-projects/sage-design-planning/pywaggle2-design.md sec 2.4.3 (env scalars) + 2.4.4
 # (concrete diff). Sentinels match sec 2.2.3 so pywaggle2 normalizes uniformly:
 #   VSN missing        -> 0
 #   node_id missing    -> (unset / empty)
