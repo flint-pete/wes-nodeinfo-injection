@@ -140,7 +140,13 @@ Env alone covers the five identity scalars.
 
 - `patches/` is the canonical deliverable. `.upstream/` holds shallow clones with the
   patches applied in-place, used only by `make test-upstream` / `make patches-check`.
+- The pywaggle2-side reader is packaged as its own repo — **`pywaggle2-nodeinfo`**
+  (v0.1.0): the reader at `waggle/data/node_info_env.py` + 25 unit tests + its own
+  README/DESIGN/HANDOFF for the CI team. That repo is the CANONICAL source; the copy
+  under `pywaggle2/node_info_env.py` here is a mirror kept only for this repo's
+  `test_e2e.py` — keep it byte-identical to `pywaggle2-nodeinfo`.
 - The reference consumer is a separate repo (`image-sampler2`): its
   `nodemeta._runtime_identity()` reads these five vars and feeds EXIF GPS + filename +
   upload meta. Its env-reading core shares the exact sentinel contract with
-  `node_info_env.py` — keep the two aligned if the contract changes.
+  `node_info_env.py` — keep all three (this mirror, `pywaggle2-nodeinfo`,
+  `image-sampler2`) aligned if the contract changes.
