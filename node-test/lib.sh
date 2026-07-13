@@ -18,7 +18,7 @@ NS_DEFAULT="default"
 BACKUP_DIR="${BACKUP_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.node-backup}"
 WAGGLE_CONFIG_DIR="${WAGGLE_CONFIG_DIR:-/etc/waggle}"
 IDENTITY_CM="wes-identity"
-SCHED_DEPLOY="wes-plugin-scheduler"
+SCHED_DEPLOY="${SCHED_DEPLOY:-wes-plugin-scheduler}"
 TEST_POD="wes-nodeinfo-test"
 
 log()   { printf '\033[1;36m[nodeinfo-test]\033[0m %s\n' "$*"; }

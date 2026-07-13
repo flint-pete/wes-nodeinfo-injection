@@ -50,7 +50,7 @@ class TestEndToEnd(unittest.TestCase):
         self.assertEqual(ni.node_id, "00004cbb4701d16c")
         self.assertAlmostEqual(ni.lat, 41.7179852752395)
         self.assertAlmostEqual(ni.lon, -87.98271513806043)
-        self.assertEqual(ni.mobility, "unknown")   # no mobility field yet -> unknown
+        self.assertEqual(ni.mobility, "unknown")   # h00f manifest has no mobility key (verified) -> unknown
         self.assertFalse(ni.vsn_is_placeholder)
 
     def test_w096_lorawan_real_values(self):

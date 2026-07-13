@@ -23,6 +23,17 @@ SRC="${SCHEDULER_SRC:-$REPO/.upstream/edge-scheduler}"
 
 [ -d "$SRC" ] || fatal "edge-scheduler source not found at $SRC (see README: populate .upstream/)"
 
+# 0a. pre-flight: confirm the scheduler Deployment name is what we expect on THIS node.
+# Node deployments can vary (wes-plugin-scheduler vs edge-scheduler vs ...); fail fast
+# with the actual candidates rather than mid-rollout on a name mismatch.
+if ! kc -n "$NS_DEFAULT" get deployment "$SCHED_DEPLOY" >/dev/null 2>&1; then
+  warn "Deployment '$SCHED_DEPLOY' not found in ns '$NS_DEFAULT'. Scheduler-like deployments here:"
+  kc -n "$NS_DEFAULT" get deployments -o name 2>/dev/null | grep -iE 'sched' >&2 || \
+    kc -n "$NS_DEFAULT" get deployments -o name >&2
+  fatal "set SCHED_DEPLOY to the correct name (edit lib.sh or export SCHED_DEPLOY=...) and re-run."
+fi
+log "scheduler Deployment confirmed: $SCHED_DEPLOY"
+
 # 0. sanity: is patch 0002 actually applied in $SRC? (grep for our marker)
 if ! grep -q 'wes-identity' "$SRC/pkg/nodescheduler/resourcemanager.go"; then
   fatal "patch 0002 not applied in $SRC -- run: git -C $SRC apply $REPO/patches/0002-*.patch"

@@ -35,9 +35,18 @@ log "wes-identity ConfigMap updated with 5 node vars"
 # 4. launch the test pod (explicit envFrom: wes-identity; no scheduler change needed)
 kc delete pod "$TEST_POD" --ignore-not-found >/dev/null
 kc apply -f "$HERE/test-plugin-pod.yaml" >/dev/null
-log "waiting for $TEST_POD to complete..."
-kc wait --for=condition=Ready pod/"$TEST_POD" --timeout=60s >/dev/null 2>&1 || true
-sleep 3
+log "waiting for $TEST_POD to finish..."
+# The pod is restartPolicy:Never and prints+exits in ~1s, so it may never report
+# Ready=True (it races straight to Succeeded). Wait for a TERMINAL phase instead:
+# Succeeded is the happy path; if it Failed we still want the logs to see why.
+# `kubectl wait` needs a positive jsonpath match, so race Succeeded vs Failed and
+# fall back to a short poll if the image is still pulling.
+if ! kc wait --for=jsonpath='{.status.phase}'=Succeeded pod/"$TEST_POD" --timeout=90s >/dev/null 2>&1; then
+  kc wait --for=jsonpath='{.status.phase}'=Failed pod/"$TEST_POD" --timeout=5s >/dev/null 2>&1 || true
+  phase="$(kc get pod "$TEST_POD" -o jsonpath='{.status.phase}' 2>/dev/null || echo '?')"
+  [ "$phase" = "Failed" ] && warn "$TEST_POD ended in Failed phase -- logs below should show why"
+  [ "$phase" = "Pending" ] && warn "$TEST_POD still Pending after 90s (image pull?) -- logs may be empty"
+fi
 
 echo "-------------------------------------------------------------"
 log "pywaggle2 read_node_info() ON THIS NODE:"
