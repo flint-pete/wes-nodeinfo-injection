@@ -40,13 +40,27 @@ if ! grep -q 'wes-identity' "$SRC/pkg/nodescheduler/resourcemanager.go"; then
 fi
 log "patch 0002 confirmed present in scheduler source"
 
-# 1. build the patched scheduler image natively (podman; RUN works on-node)
-log "building $TAG (podman, native) ..."
-( cd "$SRC" && podman build -t "$TAG" . ) || fatal "podman build failed"
+# 1. build the patched scheduler image natively (podman; RUN works on-node).
+# Notes learned on H00F: (a) build needs root here (sudo podman); (b) this node's
+# /etc/containers/registries.conf defines no unqualified-search registries, so the
+# Dockerfile's bare `FROM waggle/plugin-base` won't resolve -- fully-qualify it to
+# docker.io in a throwaway Dockerfile so we never dirty the packaged (patched) one;
+# (c) the multi-stage Dockerfile compiles Go INSIDE the container, so no host Go is
+# needed, but it DOES require --build-arg TARGETARCH and VERSION.
+ARCH="$(uname -m)"; case "$ARCH" in aarch64|arm64) TARGETARCH=arm64;; x86_64|amd64) TARGETARCH=amd64;; *) fatal "unsupported arch $ARCH";; esac
+log "building $TAG (podman, native, TARGETARCH=$TARGETARCH) ..."
+(
+  cd "$SRC"
+  sed 's|^FROM waggle/plugin-base|FROM docker.io/waggle/plugin-base|' Dockerfile > Dockerfile.nodeinfo-build
+  trap 'rm -f Dockerfile.nodeinfo-build' EXIT
+  sudo podman build -f Dockerfile.nodeinfo-build \
+    --build-arg TARGETARCH="$TARGETARCH" --build-arg VERSION=nodeinfo-test \
+    -t "$TAG" .
+) || fatal "podman build failed"
 
 # 2. import into k3s containerd (separate store from podman)
 log "importing image into k3s containerd ..."
-podman save "$TAG" | sudo k3s ctr images import - >/dev/null
+sudo podman save "$TAG" | sudo k3s ctr images import - >/dev/null
 sudo k3s ctr images tag "$TAG" "$K3S_TAG" 2>/dev/null || true
 
 # 3. back up + patch the scheduler Deployment to the side-loaded image

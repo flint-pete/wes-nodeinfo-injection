@@ -73,6 +73,36 @@ build), `make patches-check`.
 4. **Publish/rollout**: build the patched scheduler image + roll `wes-identity`
    regeneration to nodes. DRY-run friendly: with `Optional: true` the EnvFrom is a
    no-op on nodes that haven't regenerated the ConfigMap yet.
+   - **ALSO update the host `pluginctl` binary** (see Live-verification note below):
+     the injection is in `createPodTemplateSpecForPlugin`, shared by every pod-builder
+     entry point (`CreatePodTemplate`/`CreateJobTemplate`/`CreateDeploymentTemplate`
+     and the scheduler daemon) — so the patch is complete in ONE place. BUT each
+     *binary* must carry it. A node's stale host `/usr/bin/pluginctl` (0.28.0) builds
+     pods client-side with unpatched code, so `pluginctl run` on such a node shows NO
+     injection even with the patched scheduler deployed. Rollout must ship the patched
+     pluginctl too (it's in the same image), or restrict scheduling to the cloud/sesctl
+     path that goes through the patched scheduler daemon.
+
+## Live verification on H00F (2026-07-12)
+
+Both tiers proven on real hardware; node returned to stock afterward.
+
+- **Tier 1** (ConfigMap → envFrom → pywaggle2): `read_node_info()` resolved
+  `vsn=H00F, lat=41.7179852752395, lon=-87.98271513806043, mobility=unknown`; clean
+  restore to the original 2-var `wes-identity`.
+- **Tier 2** (patched scheduler auto-injection): a plugin scheduled through the
+  patched `createPodTemplateSpecForPlugin` (no envFrom in its own spec) received
+  `envFrom: [{configMapRef: {name: wes-identity, optional: true}}]` and saw all five
+  `WAGGLE_NODE_*` env vars at runtime. Scheduler rollout Ready; restored to
+  `waggle/edge-scheduler:0.28.0` after.
+- **Build**: the patched edge-scheduler compiled natively on-node via `podman build`
+  (arm64, Go compiled inside the container — no host Go), rc=0. The `/proc/acpi`
+  Infra #2 blocker did NOT bite this base image on this node.
+- **Two on-node gotchas folded into `node-test/test-add-scheduler.sh`:** (a) build
+  needs `sudo podman`; (b) this node's `registries.conf` has no unqualified-search
+  registries, so the Dockerfile's bare `FROM waggle/plugin-base` must be fully
+  qualified to `docker.io/...` (done via a throwaway Dockerfile so the packaged one
+  stays clean); the multi-stage build also requires `--build-arg TARGETARCH/VERSION`.
 
 ## Notes
 
