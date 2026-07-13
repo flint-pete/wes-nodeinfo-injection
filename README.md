@@ -66,7 +66,7 @@ Requires: `bash`, `jq`, Go (1.22+, at /usr/local/go), `python3`. `.upstream/` cl
 are needed only for `test-upstream`/`patches-check`; the three `make test` layers are
 self-contained.
 
-## Verification status (2026-07-09)
+## Verification status (2026-07-12)
 
 - env generator: **32/32** pass
 - Go isolated unit: **4/4** pass; `scheduler-change` builds clean, `go vet` clean
@@ -74,6 +74,10 @@ self-contained.
 - REAL upstream edge-scheduler: **builds rc=0** with patch applied; upstream
   `pkg/nodescheduler` tests **pass** (no regression)
 - both patches **apply clean** to pristine upstream HEAD
+- **LIVE on H00F: Tier-1 round-trip verified** — pywaggle2 resolved the real
+  NodeInfo (`vsn=H00F`, `lat=41.7179852752395`, `lon=-87.98271513806043`) from the
+  regenerated `wes-identity` ConfigMap; clean teardown back to the original 2 vars.
+  See `TESTING.md` §6. Tier-2 (scheduler auto-injection) is the next live gate.
 
 See `HANDOFF.md` for the exact diffs and what's CI-owned vs done.
 

@@ -188,9 +188,23 @@ after full teardown is the (unreferenced) side-loaded image in containerd — pr
 tests pass with patch applied; both patches apply clean to HEAD; all side-load scripts
 pass `bash -n`; Tier-1 add/remove flow validated against a fake kubectl + h00f fixture.
 
-**Pending (needs a live node + maintenance window):** the actual on-node Tier 1 run
-(first real-hardware pywaggle2 NodeInfo), then Tier 2 (auto-injection proof), then the
-image-sampler2 geotagged-upload end-to-end.
+**Verified (LIVE on H00F, 2026-07-12):** Tier-1 full round-trip on real hardware —
+`test-add-configmap.sh` regenerated `wes-identity` from H00F's real manifest and the
+test pod's pywaggle2 reader resolved the true NodeInfo:
+`vsn=H00F, node_id=00004cbb4701d16c, lat=41.7179852752395, lon=-87.98271513806043,
+mobility=unknown, vsn_is_placeholder=false`. `test-remove-configmap.sh` returned the
+CM to its exact original 2 vars, deleted the test pod, consumed the backup. The
+ConfigMap→envFrom→pywaggle2 read path (Part A) is proven end-to-end on a node.
+
+> **Teardown fix (bug found on H00F):** the first restore failed because
+> `kubectl apply -f backup.yaml` conflicts on a stale `resourceVersion` when the CM
+> was mutated by the non-apply `create configmap ... | apply` regen. `restore_resource`
+> now restores via `kubectl replace` from the backup with volatile metadata stripped
+> (`resourceVersion`/`uid`/`creationTimestamp`/`status` + the last-applied annotation),
+> falling back to delete+create. Re-verified live: clean round-trip.
+
+**Pending (needs a live node + maintenance window):** Tier 2 (auto-injection proof),
+then the image-sampler2 geotagged-upload end-to-end.
 
 ---
 
