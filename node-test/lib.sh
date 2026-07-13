@@ -57,9 +57,40 @@ restore_resource() {  # $1=kind $2=name [$3=ns]
     kc -n "$ns" delete "$kind" "$name" --ignore-not-found >/dev/null
   else
     log "restoring $kind/$name from backup"
-    kc -n "$ns" apply -f "$f" >/dev/null
+    # NOTE: `kubectl apply -f backup.yaml` does a 3-way strategic merge keyed on
+    # last-applied-configuration + resourceVersion. When the live object was mutated
+    # by a NON-apply op (our `create configmap ... | apply` regen bumps the RV and the
+    # data), the backup's stale resourceVersion makes apply fail with a Conflict and
+    # the object is NOT restored (observed on H00F, Gate 1). So DON'T apply the raw
+    # backup. Strip the volatile metadata (resourceVersion/uid/creationTimestamp) and
+    # `kubectl replace` for an imperative full-object overwrite; fall back to
+    # delete+create if replace can't reconcile (e.g. immutable field drift).
+    # Build the restore payload FROM THE BACKUP (source of truth), not the live object.
+    local payload
+    payload="$(jq 'del(.metadata.resourceVersion,.metadata.uid,.metadata.creationTimestamp,.status,
+                       .metadata.annotations["kubectl.kubernetes.io/last-applied-configuration"])' \
+                 <(kc_yaml2json "$f") 2>/dev/null)"
+    if [ -z "$payload" ] || [ "$payload" = "null" ]; then
+      warn "could not parse backup $f as json -- trying raw apply as last resort"
+      kc -n "$ns" apply -f "$f" >/dev/null || { warn "restore FAILED for $kind/$name -- backup KEPT at $f"; return 1; }
+    elif ! printf '%s' "$payload" | kc -n "$ns" replace -f - >/dev/null 2>&1; then
+      warn "replace failed -> delete+recreate $kind/$name"
+      kc -n "$ns" delete "$kind" "$name" --ignore-not-found >/dev/null
+      printf '%s' "$payload" | kc -n "$ns" create -f - >/dev/null \
+        || { warn "restore FAILED for $kind/$name -- backup KEPT at $f"; return 1; }
+    fi
   fi
   rm -f "$f"
+}
+
+# Convert a kubectl-dumped YAML backup to JSON (we always dump -o yaml). Uses python3
+# if present (always on these nodes), else assumes the file is already JSON.
+kc_yaml2json() {  # $1 = path to yaml
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -c 'import sys,yaml,json; json.dump(yaml.safe_load(open(sys.argv[1])), sys.stdout)' "$1"
+  else
+    cat "$1"
+  fi
 }
 
 node_vsn() { awk '{print toupper($0)}' "$WAGGLE_CONFIG_DIR/vsn" 2>/dev/null || echo "?"; }
