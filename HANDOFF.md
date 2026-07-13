@@ -65,11 +65,13 @@ build), `make patches-check`.
    `/run/waggle/node-info.json`, mirroring `data-config.json`) is designed in §2.4.3
    but NOT built here — it's the natural next step if/when a richer surface (sanitized
    sensor list, etc.) is wanted. Env alone is sufficient for the 5 identity scalars.
-3. **Confirm the runtime "GPS call"/"VSN call" the CI team mentioned (2026-07-06).**
-   If it's a gpsd wrapper, pywaggle2's Tier-2 `GPS()` wraps the SAME source
-   (`WAGGLE_GPS_SERVER` is already injected into plugin pods today — verified in
-   resourcemanager.go). This env change is the Tier-1 (static identity) half and is
-   complementary, not competing.
+3. **Reconcile with any runtime "GPS call"/"VSN call" the CI team ships.** This env
+   channel IS a working runtime identity mechanism (Gate 3 proved a plugin reads its
+   own vsn/gps from it and geotags real output). It covers STATIC identity (surveyed
+   manifest coords + vsn/node_id). A live-gpsd path is complementary, not competing:
+   pywaggle2's Tier-2 `GPS()` wraps `WAGGLE_GPS_SERVER` (already injected into plugin
+   pods today — verified in resourcemanager.go) for moving nodes. If CI also adds a
+   pywaggle helper, it should read THESE same env vars for the static tier.
 4. **Publish/rollout**: build the patched scheduler image + roll `wes-identity`
    regeneration to nodes. DRY-run friendly: with `Optional: true` the EnvFrom is a
    no-op on nodes that haven't regenerated the ConfigMap yet.
@@ -129,7 +131,16 @@ value sourced from the injected env, produced through pywaggle's real upload pat
 
 - The pywaggle2-side reader (`pywaggle2/node_info_env.py`) lives here for the e2e
   proof; the production home is pywaggle2 (`waggle/data/` per the nodeinfo-gps design
-  ref). The resolver logic mirrors image-sampler2 `nodemeta.py::resolve_identity()`
-  (already tested), extended to read the new env vars.
+  ref). Its env-reading core (`read_node_info`) shares the EXACT sentinel contract
+  with image-sampler2's `nodemeta._runtime_identity()` (verified in sync 2026-07-12):
+  identical `_clean`/`_coord` helpers — VSN sentinels `("","0")`→None, coords by
+  range (|lat|>90 / |lon|>180, catches 999)→None, node_id `""`→None. So the two
+  independent consumers normalize the injected env identically; keep them aligned if
+  the contract changes.
 - `.upstream/` holds shallow clones with the patches applied in-place (for
   `test-upstream`); the canonical deliverable is `patches/`.
+- **image-sampler2 is the reference CONSUMER** of this change (a separate repo,
+  `~/AI-projects/image-sampler2`). Its `nodemeta._runtime_identity()` was the
+  `sage-ci` placeholder awaiting exactly this env channel; it now reads the 5
+  `WAGGLE_NODE_*` vars and feeds them into EXIF GPS + the v2 filename + upload meta.
+  That wiring + this WES change together are what Gate 3 proved end-to-end.
