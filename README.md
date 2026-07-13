@@ -1,21 +1,24 @@
 # wes-nodeinfo-injection
 
-Build & test the small WES change that lets a running plugin learn its own node
-identity + location, so **pywaggle2** can expose `get_node_info()` (VSN, node_id,
-lat/lon, mobility) — the "Part B" WES side of the pywaggle2 two-part improvement.
+A small WES change that lets a running plugin learn its own node identity + location,
+so **pywaggle2** can expose `get_node_info()` (VSN, node_id, lat/lon, mobility). This
+is the WES ("Part B") half of the pywaggle2 node-info improvement.
 
-Design: `~/AI-projects/pywaggle2-design.md` §2.4 (grounded in WES source + live
-H00F/W096 node inspection, 2026-07-09).
+Verified end-to-end on live hardware (H00F): a plugin scheduled by the patched
+scheduler auto-receives the env, reads its real identity/GPS, and produced a
+geotagged upload visible in the Sage data API. Delivered as **two clean patches**
+against two upstream repos — nothing is pushed upstream yet.
 
 ## The change in one sentence
 
-Deliver five node-identity env vars to every plugin pod by (a) adding GPS+mobility
-to the **existing** `wes-identity` ConfigMap, and (b) giving the plugin container
-`EnvFrom: wes-identity` — reusing mechanisms WES already has. **No raw manifest is
-ever mounted into plugin pods** (it carries sensor URIs/creds, DevEUIs, serials,
-modem, street address — see design §2.4.2).
+Deliver five node-identity env vars to every plugin pod by (a) adding GPS+mobility to
+the **existing** `wes-identity` ConfigMap, and (b) giving the plugin container
+`EnvFrom: wes-identity`. Both reuse mechanisms WES already has. **The raw manifest is
+never mounted into plugin pods** — it carries sensor URIs/creds, DevEUIs, serials,
+modem config, and street address; the env projection is an inherent whitelist.
 
-The five vars:
+The five vars (pywaggle2 normalizes every sentinel → `None`/`"unknown"`, so plugin
+authors never see `0`/`999`/`""`):
 
 | Env var | Source | Sentinel when absent | pywaggle2 sees |
 |---|---|---|---|
@@ -23,69 +26,60 @@ The five vars:
 | `WAGGLE_NODE_VSN` | `/etc/waggle/vsn` (existing) | `0` | `None` |
 | `WAGGLE_NODE_GPS_LAT` | manifest `.gps_lat` (**new**) | `999` (range-detected) | `None` |
 | `WAGGLE_NODE_GPS_LON` | manifest `.gps_lon` (**new**) | `999` | `None` |
-| `WAGGLE_NODE_MOBILITY` | manifest `.mobility` (**new**, proposed field) | empty | `"unknown"` |
+| `WAGGLE_NODE_MOBILITY` | manifest `.mobility` (**new field, CI to add**) | empty | `"unknown"` |
 
-## Why two upstream repos
+## How it works (two repos, because plugin-pod env is injected by the scheduler)
 
-The standard plugin-pod env/mounts are injected by the **edge-scheduler** binary,
-NOT by the waggle-edge-stack YAMLs (design §2.4.4). So the change spans both:
+Standard plugin-pod env/mounts are injected by the **edge-scheduler** binary, not by
+the waggle-edge-stack YAMLs — so the change spans both:
 
 - `patches/0001-waggle-edge-stack-add-gps-mobility-to-wes-identity.patch`
-  → `update-stack.sh::update_wes()`: add the 3 manifest-sourced vars to
-  `configs/wes-identity.env` (which becomes the `wes-identity` ConfigMap).
+  → `update-stack.sh::update_wes()`: adds the 3 manifest-sourced vars (via `jq`, in
+  the existing style) to `configs/wes-identity.env`, which becomes the `wes-identity`
+  ConfigMap.
 - `patches/0002-edge-scheduler-envfrom-wes-identity.patch`
-  → `resourcemanager.go::createPodTemplateSpecForPlugin()`: add
-  `EnvFrom: wes-identity` (Optional) to the plugin container.
+  → `resourcemanager.go::createPodTemplateSpecForPlugin()`: adds one field to the
+  plugin container literal —
+  ```go
+  EnvFrom: []apiv1.EnvFromSource{{ConfigMapRef: &apiv1.ConfigMapEnvSource{
+      LocalObjectReference: apiv1.LocalObjectReference{Name: "wes-identity"},
+      Optional:             booltoPtr(true)}}},
+  ```
+  `Optional: true` → a node whose WES hasn't regenerated the ConfigMap still schedules
+  plugins (safe, incremental rollout). `EnvFrom` layers UNDER `container.Env`, so any
+  explicit plugin `Env` var of the same name still wins.
 
-Both are **verified to apply cleanly** to pristine upstream HEAD (`make patches-check`).
-
-## Layout
-
-```
-gen-wes-identity.sh          extracted, testable form of the update-stack.sh change
-test-gen-wes-identity.sh     32 tests for the generator (values, sentinels, no-leak)
-fixtures/                    faithful node dirs: h00f, w096, minimal, mobile, nomanifest
-scheduler-change/            isolated Go module reproducing the container build + EnvFrom
-  podbuilder.go              the change, using k8s.io/api v0.23.1 (matches upstream)
-  podbuilder_test.go         4 Go unit tests
-pywaggle2/node_info_env.py   the pywaggle2-side reader (sentinel->None normalization)
-test_e2e.py                  7 tests: gen -> env -> pywaggle2 reader (full chain)
-patches/                     real unified diffs for the two upstream repos
-.upstream/                   shallow clones (edge-scheduler, waggle-edge-stack) w/ patches applied
-```
+`createPodTemplateSpecForPlugin` is shared by every pod-builder entry point
+(`CreatePodTemplate`, `CreateJobTemplate`, `CreateDeploymentTemplate`, and the
+scheduler daemon), so the single patch covers all scheduling paths.
 
 ## Test it
 
 ```bash
-make test            # all three layers (bash + go + python), no mocks
+make test            # 3 layers (bash + go + python), no mocks
 make test-upstream   # build the REAL upstream scheduler w/ patch + run its tests
-make patches-check   # confirm both patches apply to pristine upstream
+make patches-check   # confirm both patches apply clean to pristine upstream HEAD
 ```
 
-Requires: `bash`, `jq`, Go (1.22+, at /usr/local/go), `python3`. `.upstream/` clones
-are needed only for `test-upstream`/`patches-check`; the three `make test` layers are
+Requires `bash`, `jq`, Go (1.22+ at /usr/local/go), `python3`. `.upstream/` clones are
+needed only for `test-upstream`/`patches-check`; the three `make test` layers are
 self-contained.
 
-## Verification status (2026-07-12)
+To exercise it on a real node (side-load + restore), see `node-test/README.md`.
 
-- env generator: **32/32** pass
-- Go isolated unit: **4/4** pass; `scheduler-change` builds clean, `go vet` clean
-- end-to-end: **7/7** pass
-- REAL upstream edge-scheduler: **builds rc=0** with patch applied; upstream
-  `pkg/nodescheduler` tests **pass** (no regression)
-- both patches **apply clean** to pristine upstream HEAD
-- **LIVE on H00F: Tier-1 round-trip verified** — pywaggle2 resolved the real
-  NodeInfo (`vsn=H00F`, `lat=41.7179852752395`, `lon=-87.98271513806043`) from the
-  regenerated `wes-identity` ConfigMap; clean teardown back to the original 2 vars.
-  See `TESTING.md` §6. Tier-2 (scheduler auto-injection) is the next live gate.
+## Layout
 
-See `HANDOFF.md` for the exact diffs and what's CI-owned vs done.
+```
+gen-wes-identity.sh          testable form of the update-stack.sh change (Part A)
+test-gen-wes-identity.sh     32 tests: values, sentinels, no-leak assertions
+fixtures/                    faithful node dirs: h00f, w096, minimal, mobile, nomanifest
+scheduler-change/            isolated Go module reproducing the container build + EnvFrom
+pywaggle2/node_info_env.py   the pywaggle2-side reader (sentinel->None normalization)
+test_e2e.py                  7 tests: gen -> env -> pywaggle2 reader (full chain)
+patches/                     the two upstream diffs (the deliverable)
+node-test/                   side-load + restore scripts for a live node
+.upstream/                   shallow clones w/ patches applied (for test-upstream)
+```
 
-## Testing on a real node before upstream merge
-
-`node-test/` has side-load scripts (Tier 1: ConfigMap-only, safe; Tier 2: patched
-scheduler) to install the change on H00F/any node, test pywaggle2 `get_node_info()`
-on real hardware, then restore. See `node-test/README.md`.
-
-Full operator guide — instructions, rationale, and risk analysis — is in
-`TESTING.md`.
+See `HANDOFF.md` for the CI-team summary: rollout risks and how to fold the change
+into base CI. `TESTING.md` is the operator guide for the side-load path.

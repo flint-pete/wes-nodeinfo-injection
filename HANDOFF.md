@@ -1,149 +1,146 @@
-# HANDOFF -- wes-nodeinfo-injection
+# HANDOFF — wes-nodeinfo-injection (for the Sage CI team)
 
-For the Sage CI team. This is the "Part B" WES change that feeds pywaggle2's
-`get_node_info()`. It is a prototype, built and tested against real upstream source
-and two live nodes, expressed as two applyable patches. Nothing here has been pushed
-to any upstream repo.
+The WES ("Part B") change that feeds pywaggle2's `get_node_info()`. Delivered as two
+patches against upstream, verified end-to-end on live hardware. Nothing has been
+pushed upstream — this repo is the review + test harness; `patches/` is the
+deliverable.
 
-## What we're asking for
+## What it does
 
-Deliver 5 node-identity env vars to every plugin pod, reusing mechanisms WES already
-has. Do NOT mount the raw `node-manifest-v2.json` into plugin pods (it leaks sensor
-URIs/creds, LoRaWAN DevEUIs, hardware serials, modem config, precise street address —
-verified on H00F + W096; see `~/AI-projects/pywaggle2-design.md` §2.4.2).
+Gives every plugin pod five node-identity env vars so a running plugin can learn its
+own VSN, node_id, GPS, and mobility:
 
-## The two patches (both apply clean to upstream HEAD)
+```
+WAGGLE_NODE_ID  WAGGLE_NODE_VSN  WAGGLE_NODE_GPS_LAT  WAGGLE_NODE_GPS_LON  WAGGLE_NODE_MOBILITY
+```
+
+Do NOT mount the raw `node-manifest-v2.json` into plugin pods — it leaks sensor
+URIs/creds, LoRaWAN DevEUIs, hardware serials, modem config, and precise street
+address (verified on H00F + W096). The env projection is an inherent whitelist: WES
+picks each var explicitly, so nothing sensitive rides along.
+
+## How it works — the two patches (both apply clean to upstream HEAD)
 
 ### 1. waggle-edge-stack — `kubernetes/update-stack.sh` (`update_wes`)
-`patches/0001-...patch`. Today it writes only `WAGGLE_NODE_{ID,VSN}` into
+`patches/0001-*.patch`. Today `update_wes` writes only `WAGGLE_NODE_{ID,VSN}` into
 `configs/wes-identity.env` (→ the `wes-identity` ConfigMap). The patch adds three
-manifest-sourced vars via `jq`, in the same style:
-`WAGGLE_NODE_GPS_LAT`, `WAGGLE_NODE_GPS_LON`, `WAGGLE_NODE_MOBILITY`, with sentinels
+manifest-sourced vars via `jq`, in the same style, with sentinels for absent values
 (`999` for missing coords — off-globe, since `0` is a real coordinate; empty for
-missing mobility).
+missing mobility):
+
+```sh
+WAGGLE_NODE_GPS_LAT=$(jq -r '(.gps_lat) // "999"' "${_manifest}" ...)
+WAGGLE_NODE_GPS_LON=$(jq -r '(.gps_lon) // "999"' "${_manifest}" ...)
+WAGGLE_NODE_MOBILITY=$(jq -r '(.mobility) // ""' "${_manifest}" ...)
+```
 
 ### 2. edge-scheduler — `pkg/nodescheduler/resourcemanager.go`
-`patches/0002-...patch`. In `createPodTemplateSpecForPlugin`, the plugin container
+`patches/0002-*.patch`. In `createPodTemplateSpecForPlugin`, the plugin container
 literal gains one field:
+
 ```go
 EnvFrom: []apiv1.EnvFromSource{
     {ConfigMapRef: &apiv1.ConfigMapEnvSource{
         LocalObjectReference: apiv1.LocalObjectReference{Name: "wes-identity"},
-        Optional:             booltoPtr(true),
+        Optional:             booltoPtr(true),  // reuses the existing helper (:2181)
     }},
 },
 ```
-`Optional: true` means a node whose WES hasn't created the ConfigMap still schedules
-plugins (safe rollout). EnvFrom is layered UNDER `container.Env`, so any explicit
-`Env` var of the same name still wins — the "user env first" precedence is preserved.
 
-## What's verified (all green, real tooling — no mocks)
+- `Optional: true` → a node whose WES hasn't created/regenerated the ConfigMap still
+  schedules plugins (safe rollout).
+- `EnvFrom` is layered UNDER `container.Env`, so an explicit plugin `Env` var of the
+  same name still wins — "user env first" precedence preserved.
+- `createPodTemplateSpecForPlugin` is shared by all pod-builder entry points
+  (`CreatePodTemplate`, `CreateJobTemplate`, `CreateDeploymentTemplate`, and the
+  scheduler daemon), so this ONE patch covers every scheduling path.
 
-- **env generator**: 32/32 — real values on H00F/W096 fixtures, sentinel→behavior on
-  minimal/mobile/fresh-node, and **no-leak assertions** (deveui, sensor uri, serial,
-  address never appear in output).
-- **Go change**: isolated unit 4/4; AND the **real upstream `edge-scheduler`
-  `pkg/nodescheduler` builds (rc=0) with the patch applied and its own tests pass**
-  (no regression). k8s types are the upstream-pinned `k8s.io/api v0.23.1`.
-- **end-to-end** (7/7): `gen-wes-identity.sh` → env → pywaggle2 `read_node_info()`
-  yields correct `NodeInfo` — real lat/lon on real nodes, `None` on every sentinel,
-  `mobility="unknown"` when absent, explicit-env-override wins.
-- Both patches **apply clean** to pristine upstream HEAD.
+pywaggle2 (`pywaggle2/node_info_env.py`, production home `waggle/data/`) normalizes
+sentinels → `None`/`"unknown"` by range, so plugin authors never see `0`/`999`/`""`.
 
-Reproduce: `make test` (fast, self-contained), `make test-upstream` (full scheduler
-build), `make patches-check`.
+## Verification
 
-## What's CI-owned / open
+Offline (`make test`, no mocks): env generator 32/32 (incl. no-leak assertions);
+isolated Go unit 4/4; end-to-end gen→env→pywaggle2 reader 7/7; the REAL upstream
+`edge-scheduler` builds rc=0 with the patch and its `pkg/nodescheduler` tests pass;
+both patches apply clean to pristine HEAD (`make patches-check`). k8s types pinned to
+the upstream `k8s.io/api v0.23.1`.
 
-1. **Add a `mobility` field to `node-manifest-v2.json`** (design §2.3; default
-   `static` for the current fleet). Until it exists the generator emits the empty
-   sentinel and pywaggle2 reads `"unknown"` — correct, but GPS-mobility logic stays
-   conservative until the field lands. This is the only true schema change requested.
-2. **Curated `node-info.json` file channel (optional, phase 2).** This prototype
-   implements the env-scalar channel (covers ~95% of plugins + non-Python via env).
-   The structured file channel (a whitelisted `waggle-node-info` ConfigMap mounted at
-   `/run/waggle/node-info.json`, mirroring `data-config.json`) is designed in §2.4.3
-   but NOT built here — it's the natural next step if/when a richer surface (sanitized
-   sensor list, etc.) is wanted. Env alone is sufficient for the 5 identity scalars.
-3. **Reconcile with any runtime "GPS call"/"VSN call" the CI team ships.** This env
-   channel IS a working runtime identity mechanism (Gate 3 proved a plugin reads its
-   own vsn/gps from it and geotags real output). It covers STATIC identity (surveyed
-   manifest coords + vsn/node_id). A live-gpsd path is complementary, not competing:
-   pywaggle2's Tier-2 `GPS()` wraps `WAGGLE_GPS_SERVER` (already injected into plugin
-   pods today — verified in resourcemanager.go) for moving nodes. If CI also adds a
-   pywaggle helper, it should read THESE same env vars for the static tier.
-4. **Publish/rollout**: build the patched scheduler image + roll `wes-identity`
-   regeneration to nodes. DRY-run friendly: with `Optional: true` the EnvFrom is a
-   no-op on nodes that haven't regenerated the ConfigMap yet.
-   - **ALSO update the host `pluginctl` binary** (see Live-verification note below):
-     the injection is in `createPodTemplateSpecForPlugin`, shared by every pod-builder
-     entry point (`CreatePodTemplate`/`CreateJobTemplate`/`CreateDeploymentTemplate`
-     and the scheduler daemon) — so the patch is complete in ONE place. BUT each
-     *binary* must carry it. A node's stale host `/usr/bin/pluginctl` (0.28.0) builds
-     pods client-side with unpatched code, so `pluginctl run` on such a node shows NO
-     injection even with the patched scheduler deployed. Rollout must ship the patched
-     pluginctl too (it's in the same image), or restrict scheduling to the cloud/sesctl
-     path that goes through the patched scheduler daemon.
+Live on H00F (both tiers, node returned to stock after):
+- **ConfigMap → envFrom → pywaggle2**: `read_node_info()` resolved the real
+  `vsn=H00F, node_id=00004cbb4701d16c, lat=41.7179852752395, lon=-87.98271513806043,
+  mobility=unknown`.
+- **Patched scheduler auto-injection**: a plugin scheduled with no `envFrom` in its
+  own spec received `envFrom: [{configMapRef: {name: wes-identity, optional: true}}]`
+  and saw all five vars at runtime.
+- **Full cloud round-trip**: the reference consumer (image-sampler2, wired to read
+  these vars) produced a geotagged image whose EXIF carried H00F's real coords, and
+  the upload appears in the public Sage data API with `meta.vsn=H00F,
+  node_id=00004cbb4701d16c`.
 
-## Live verification on H00F (2026-07-12)
+## Test on a node (setup / teardown)
 
-Both tiers proven on real hardware; node returned to stock afterward.
+Scripts live in `node-test/` and run ON the node (`sudo kubectl`). Backups go to
+`node-test/.node-backup/` (gitignored); re-running `add` never clobbers an existing
+backup; teardown is restore-from-backup (the change mutates existing objects).
 
-- **Tier 1** (ConfigMap → envFrom → pywaggle2): `read_node_info()` resolved
-  `vsn=H00F, lat=41.7179852752395, lon=-87.98271513806043, mobility=unknown`; clean
-  restore to the original 2-var `wes-identity`.
-- **Tier 2** (patched scheduler auto-injection): a plugin scheduled through the
-  patched `createPodTemplateSpecForPlugin` (no envFrom in its own spec) received
-  `envFrom: [{configMapRef: {name: wes-identity, optional: true}}]` and saw all five
-  `WAGGLE_NODE_*` env vars at runtime. Scheduler rollout Ready; restored to
-  `waggle/edge-scheduler:0.28.0` after.
-- **Build**: the patched edge-scheduler compiled natively on-node via `podman build`
-  (arm64, Go compiled inside the container — no host Go), rc=0. The `/proc/acpi`
-  Infra #2 blocker did NOT bite this base image on this node.
-- **Two on-node gotchas folded into `node-test/test-add-scheduler.sh`:** (a) build
-  needs `sudo podman`; (b) this node's `registries.conf` has no unqualified-search
-  registries, so the Dockerfile's bare `FROM waggle/plugin-base` must be fully
-  qualified to `docker.io/...` (done via a throwaway Dockerfile so the packaged one
-  stays clean); the multi-stage build also requires `--build-arg TARGETARCH/VERSION`.
+```bash
+# TIER 1 — ConfigMap only (safe, seconds to revert; tests Part A + pywaggle2 read)
+cd node-test
+./test-add-configmap.sh       # backup + regenerate wes-identity (5 vars from THIS
+                              # node's manifest) + launch a reader pod, print NodeInfo
+./test-remove-configmap.sh    # restore original wes-identity, delete the pod
 
-## Gate 3 — consumer proof: image-sampler2 geotags from the injected env (2026-07-12)
+# TIER 2 — patched scheduler (control-plane; proves fleet-wide auto-injection)
+git -C ../.upstream/edge-scheduler apply ../patches/0002-*.patch   # prereq
+./test-add-scheduler.sh       # podman-build patched scheduler, k3s-import, repoint the
+                              # Deployment; AUTO-REVERTS if the rollout isn't Ready
+sudo kubectl get pod <plugin> -o jsonpath='{.spec.containers[0].envFrom}'  # -> wes-identity
+./test-remove-scheduler.sh    # restore the original scheduler image
+```
 
-The producer half of the story, closing the loop. image-sampler2's
-`nodemeta._runtime_identity()` was wired to read the 5 injected `WAGGLE_NODE_*` env
-vars (the placeholder it was designed to await), and side-loaded on H00F with those
-vars supplied via `pluginctl run --env-from` (exactly what `envFrom: wes-identity`
-delivers). Result: the plugin produced `1783…-v2-H00F-top_camera.jpg` whose EXIF
-carried `Model=H00F` and GPS `lat=41.7179852778, lon=-87.9827151389` (H00F's real
-surveyed coords), with upload meta `vsn=H00F, node_id=00004cbb4701d16c` — every
-value sourced from the injected env, produced through pywaggle's real upload path.
-- **Full Beehive round-trip VERIFIED (2026-07-13):** after the H00F upload-agent was
-  fixed, a re-run shipped clean and the object appears in the public Sage data API
-  (`data.sagecontinuum.org/api/v1/query`, filter `vsn=H00F name=upload
-  task=gate3-imgsampler`) with `value` = the storage URL and `meta.vsn=H00F,
-  meta.node_id=00004cbb4701d16c, meta.filename=…-v2-H00F-top_camera.jpg`. The stored
-  object's EXIF carries the real coords (verified on-node before ship; the storage
-  bucket itself is auth-gated, but the query-API record + on-node EXIF are conclusive).
-- Gotcha found: the upload-agent's path regex requires the version segment to match
-  `x.y.z|latest|test`, so a side-load image tagged `:gate3` is silently never
-  shipped; retag `:test`. (Captured in the sage-waggle sideload reference.)
-- Together, Gate 2 (scheduler AUTO-injects the envFrom) + Gate 3 (a real plugin
-  CONSUMES the env into geotagged output, verified all the way to the cloud data API)
-  prove the whole mechanism end-to-end on real hardware.
+Run Tier 1 before Tier 2 so the ConfigMap holds the vars. Full operator detail +
+risk table: `TESTING.md`.
 
-## Notes
+## Risks for fleet-wide deployment
 
-- The pywaggle2-side reader (`pywaggle2/node_info_env.py`) lives here for the e2e
-  proof; the production home is pywaggle2 (`waggle/data/` per the nodeinfo-gps design
-  ref). Its env-reading core (`read_node_info`) shares the EXACT sentinel contract
-  with image-sampler2's `nodemeta._runtime_identity()` (verified in sync 2026-07-12):
-  identical `_clean`/`_coord` helpers — VSN sentinels `("","0")`→None, coords by
-  range (|lat|>90 / |lon|>180, catches 999)→None, node_id `""`→None. So the two
-  independent consumers normalize the injected env identically; keep them aligned if
-  the contract changes.
-- `.upstream/` holds shallow clones with the patches applied in-place (for
-  `test-upstream`); the canonical deliverable is `patches/`.
-- **image-sampler2 is the reference CONSUMER** of this change (a separate repo,
-  `~/AI-projects/image-sampler2`). Its `nodemeta._runtime_identity()` was the
-  `sage-ci` placeholder awaiting exactly this env channel; it now reads the 5
-  `WAGGLE_NODE_*` vars and feeds them into EXIF GPS + the v2 filename + upload meta.
-  That wiring + this WES change together are what Gate 3 proved end-to-end.
+| Risk | Impact | Mitigation |
+|---|---|---|
+| Scheduler rollout fails / crashloops | plugin scheduling stalls fleet-wide until revert | `Optional: true` keeps scheduling working even with no ConfigMap; roll the scheduler image canary-first (one node) before fleet; deployment is trivially revertible to the prior image |
+| ConfigMap not yet regenerated on a node | plugin gets no node-info (env absent) | `Optional: true` → no-op, plugins still run; roll the `update-stack.sh` change and the scheduler independently, in either order |
+| `mobility` field absent from manifests | every node reports `mobility="unknown"` | correct-by-design (conservative); add the field (default `static`) to close it — see CI tasks |
+| Manifest GPS stale/wrong on a node | plugin gets bad coords | out of scope for this change; surfaced as-is. Mobile nodes should use live gpsd (pywaggle2 Tier-2 GPS via `WAGGLE_GPS_SERVER`, already injected), not this static env |
+| Explicit plugin env collides with an injected var | none | k8s applies `Env` over `EnvFrom` → explicit wins (verified) |
+| Stale host `pluginctl` builds pods client-side | `pluginctl run` on a node with an old binary shows NO injection despite a patched scheduler | ship the patched `pluginctl` (same image) alongside the scheduler, OR schedule via the cloud/sesctl daemon path. The scheduler daemon itself is always correct once patched |
+
+## Folding into base CI
+
+1. **Merge `patches/0001`** into waggle-edge-stack `update-stack.sh`. It's a 3-line
+   `jq` addition in the existing `update_wes` block + 3 lines in the `wes-identity.env`
+   heredoc — no new files, no new plumbing. The ConfigMap is already regenerated
+   per-node by every `update-stack` run, so no extra rollout step: it takes effect the
+   next time a node runs update-stack.
+2. **Merge `patches/0002`** into edge-scheduler and cut a normal scheduler release.
+   One field on one container literal, reusing the existing `booltoPtr` helper and the
+   already-imported `apiv1` alias. The scheduler image ships through the normal build;
+   `Optional: true` makes deploy order irrelevant.
+3. **Add a `mobility` field to `node-manifest-v2.json`** (default `static` for the
+   current fleet). This is the only true schema change requested; until it lands the
+   generator emits the empty sentinel and pywaggle2 reads `"unknown"` (harmless).
+4. **pywaggle2**: land `node_info_env.py`'s reader in `waggle/data/` behind
+   `get_node_info()`. Its sentinel contract must stay in lock-step with the generator
+   (`("","0")→None` for vsn, coords by range |lat|>90 / |lon|>180, node_id `""`→None).
+
+Optional phase 2 (not built here): a richer, still-whitelisted `node-info.json` file
+channel (a `waggle-node-info` ConfigMap mounted at `/run/waggle/node-info.json`,
+mirroring `data-config.json`) for structured surfaces like a sanitized sensor list.
+Env alone covers the five identity scalars.
+
+## Repo notes
+
+- `patches/` is the canonical deliverable. `.upstream/` holds shallow clones with the
+  patches applied in-place, used only by `make test-upstream` / `make patches-check`.
+- The reference consumer is a separate repo (`image-sampler2`): its
+  `nodemeta._runtime_identity()` reads these five vars and feeds EXIF GPS + filename +
+  upload meta. Its env-reading core shares the exact sentinel contract with
+  `node_info_env.py` — keep the two aligned if the contract changes.
