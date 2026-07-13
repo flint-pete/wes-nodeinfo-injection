@@ -116,16 +116,19 @@ delivers). Result: the plugin produced `1783…-v2-H00F-top_camera.jpg` whose EX
 carried `Model=H00F` and GPS `lat=41.7179852778, lon=-87.9827151389` (H00F's real
 surveyed coords), with upload meta `vsn=H00F, node_id=00004cbb4701d16c` — every
 value sourced from the injected env, produced through pywaggle's real upload path.
-- The final Beehive object-store round-trip was blocked by an UNRELATED chronic H00F
-  upload-agent rsync stall (154 agent restarts; auth succeeds, transfer interrupts) —
-  the file was correctly produced AND selected by the agent; only the node→Beehive
-  transfer failed. Not a defect in this change.
+- **Full Beehive round-trip VERIFIED (2026-07-13):** after the H00F upload-agent was
+  fixed, a re-run shipped clean and the object appears in the public Sage data API
+  (`data.sagecontinuum.org/api/v1/query`, filter `vsn=H00F name=upload
+  task=gate3-imgsampler`) with `value` = the storage URL and `meta.vsn=H00F,
+  meta.node_id=00004cbb4701d16c, meta.filename=…-v2-H00F-top_camera.jpg`. The stored
+  object's EXIF carries the real coords (verified on-node before ship; the storage
+  bucket itself is auth-gated, but the query-API record + on-node EXIF are conclusive).
 - Gotcha found: the upload-agent's path regex requires the version segment to match
   `x.y.z|latest|test`, so a side-load image tagged `:gate3` is silently never
   shipped; retag `:test`. (Captured in the sage-waggle sideload reference.)
 - Together, Gate 2 (scheduler AUTO-injects the envFrom) + Gate 3 (a real plugin
-  CONSUMES the env into geotagged output) prove the whole mechanism end-to-end on
-  real hardware.
+  CONSUMES the env into geotagged output, verified all the way to the cloud data API)
+  prove the whole mechanism end-to-end on real hardware.
 
 ## Notes
 
