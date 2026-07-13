@@ -104,6 +104,27 @@ Both tiers proven on real hardware; node returned to stock afterward.
   qualified to `docker.io/...` (done via a throwaway Dockerfile so the packaged one
   stays clean); the multi-stage build also requires `--build-arg TARGETARCH/VERSION`.
 
+## Gate 3 — consumer proof: image-sampler2 geotags from the injected env (2026-07-12)
+
+The producer half of the story, closing the loop. image-sampler2's
+`nodemeta._runtime_identity()` was wired to read the 5 injected `WAGGLE_NODE_*` env
+vars (the placeholder it was designed to await), and side-loaded on H00F with those
+vars supplied via `pluginctl run --env-from` (exactly what `envFrom: wes-identity`
+delivers). Result: the plugin produced `1783…-v2-H00F-top_camera.jpg` whose EXIF
+carried `Model=H00F` and GPS `lat=41.7179852778, lon=-87.9827151389` (H00F's real
+surveyed coords), with upload meta `vsn=H00F, node_id=00004cbb4701d16c` — every
+value sourced from the injected env, produced through pywaggle's real upload path.
+- The final Beehive object-store round-trip was blocked by an UNRELATED chronic H00F
+  upload-agent rsync stall (154 agent restarts; auth succeeds, transfer interrupts) —
+  the file was correctly produced AND selected by the agent; only the node→Beehive
+  transfer failed. Not a defect in this change.
+- Gotcha found: the upload-agent's path regex requires the version segment to match
+  `x.y.z|latest|test`, so a side-load image tagged `:gate3` is silently never
+  shipped; retag `:test`. (Captured in the sage-waggle sideload reference.)
+- Together, Gate 2 (scheduler AUTO-injects the envFrom) + Gate 3 (a real plugin
+  CONSUMES the env into geotagged output) prove the whole mechanism end-to-end on
+  real hardware.
+
 ## Notes
 
 - The pywaggle2-side reader (`pywaggle2/node_info_env.py`) lives here for the e2e
