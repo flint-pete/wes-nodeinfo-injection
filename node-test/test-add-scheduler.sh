@@ -9,7 +9,8 @@
 # the 5 vars -- otherwise the scheduler injects an envFrom to a CM without gps/mobility.
 #
 # Revert with test-remove-scheduler.sh (restores the original Deployment image).
-# Run ON the node. Requires: podman, k3s, git, go (to build), sudo kubectl.
+# Run ON the node. Requires: sudo podman, k3s, git, network access to docker.io, and
+# kubectl via $KUBECTL (see lib.sh). No host Go: Go compiles inside the container.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib.sh

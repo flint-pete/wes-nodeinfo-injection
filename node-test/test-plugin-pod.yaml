@@ -5,8 +5,10 @@
 # (Optional), then runs the pywaggle2 reader and prints the resolved NodeInfo.
 #
 # This proves the ConfigMap->env->pywaggle2 chain on a real node WITHOUT needing the
-# patched scheduler. The pywaggle2 reader is inlined (kept byte-identical to
-# pywaggle2/node_info_env.py) so the pod is self-contained -- no image build.
+# patched scheduler. The pywaggle2 reader is inlined as a condensed, semantically
+# equivalent copy of read_node_info() from pywaggle2/node_info_env.py (NOT
+# byte-identical -- keep the logic in sync by hand) so the pod is self-contained --
+# no image build.
 #
 # NOTE: carries the sagecontinuum.org plugin labels so it looks like a plugin pod,
 # but sets envFrom itself (Tier 1). In Tier 2 the scheduler injects envFrom instead.

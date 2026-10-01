@@ -2,18 +2,27 @@
 # lib.sh -- shared helpers for the node side-load test scripts (source, don't run).
 #
 # These scripts side-load the wes-nodeinfo-injection change onto a node BEFORE the
-# upstream patches are merged, so we can test pywaggle2 get_node_info() on real
+# upstream patches are merged, so we can test the pywaggle2 reader (read_node_info()) on real
 # hardware, then cleanly restore. Modeled on wes-local-cache-manager's
 # test-add-node.sh / test-remove-node.sh, but this change MUTATES existing WES
 # machinery (the wes-identity ConfigMap + the scheduler) rather than deploying a
 # standalone DaemonSet -- so "remove" means RESTORE, not delete.
 #
-# Run these ON the node (sudo kubectl required on H00F), or set KUBECTL to a remote
-# wrapper. All backups land in ./.node-backup/ (gitignored) so remove/restore works
-# even in a fresh shell.
+# Run these ON the node, or set KUBECTL to a remote wrapper. Default KUBECTL is
+# `sudo kubectl` if a kubectl binary is on PATH, else `sudo k3s kubectl` if k3s is
+# (a Thor/k3s node may have only the k3s binary). All backups land in
+# ./.node-backup/ (gitignored) so remove/restore works even in a fresh shell.
 set -euo pipefail
 
-KUBECTL="${KUBECTL:-sudo kubectl}"
+if [ -z "${KUBECTL:-}" ]; then
+  if command -v kubectl >/dev/null 2>&1; then
+    KUBECTL="sudo kubectl"
+  elif command -v k3s >/dev/null 2>&1; then
+    KUBECTL="sudo k3s kubectl"
+  else
+    KUBECTL="sudo kubectl"   # `need "$KUBECTL"` will report what's missing
+  fi
+fi
 NS_DEFAULT="default"
 BACKUP_DIR="${BACKUP_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.node-backup}"
 WAGGLE_CONFIG_DIR="${WAGGLE_CONFIG_DIR:-/etc/waggle}"
@@ -40,11 +49,19 @@ backup_resource() {  # $1=kind $2=name [$3=ns]
     warn "backup already exists ($f) -- keeping the ORIGINAL, not re-backing-up."
     return 0
   fi
-  if kc -n "$ns" get "$kind" "$name" -o yaml > "$f" 2>/dev/null; then
+  # Only a genuine NotFound may be recorded as __ABSENT__ (restore would then DELETE
+  # the object). Any other failure -- no cluster access, wrong kubeconfig, kubectl
+  # missing -- must abort, or teardown would delete a real wes-identity/scheduler.
+  local err rc=0
+  err="$(kc -n "$ns" get "$kind" "$name" -o yaml 2>&1 >"$f")" || rc=$?
+  if [ "$rc" -eq 0 ]; then
     log "backed up $kind/$name -> $f"
-  else
+  elif printf '%s' "$err" | grep -qE '\(NotFound\)|"'"$name"'" not found'; then
     warn "$kind/$name not present to back up (fresh create expected)"
     echo "__ABSENT__" > "$f"   # marker: restore = delete
+  else
+    rm -f "$f"
+    fatal "could not read $kind/$name to back it up (kubectl: ${err:-exit $rc}). Refusing to continue: recording it as absent would make restore DELETE it. Check cluster access, e.g. KUBECTL=\"sudo k3s kubectl\"."
   fi
 }
 

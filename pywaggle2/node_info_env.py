@@ -4,7 +4,8 @@ node_info_env.py -- the pywaggle2-side reader for the WES-injected node identity
 
 This is the small piece of pywaggle2 that consumes the env vars the WES change
 produces (via the `wes-identity` ConfigMap, EnvFrom-projected into every plugin pod).
-It implements the sentinel->None normalization from sage-design-planning/pywaggle2-design.md sec 2.2.3 so
+It implements the sentinel->None normalization from the pywaggle2 design doc sec 2.2.3
+(https://github.com/flint-pete/sage-design-planning/blob/master/pywaggle2-design.md) so
 plugin authors never see 0/999/"" -- only real values or None.
 
 Scope: this is ONLY the env-tier reader (Tier-1 static identity from env). Live GPS

@@ -7,7 +7,7 @@ import (
 )
 
 func TestPluginContainerGetsWESIdentityEnvFrom(t *testing.T) {
-	c := BuildPluginContainer("image-sampler2", "waggle/image-sampler2:1.0.0", nil)
+	c := BuildPluginContainer("media-sampler3", "waggle/media-sampler3:1.0.0", nil)
 
 	if len(c.EnvFrom) != 1 {
 		t.Fatalf("expected exactly 1 EnvFrom source, got %d", len(c.EnvFrom))

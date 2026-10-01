@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # test-remove-scheduler.sh -- TIER 2 teardown. Restores the original
-# wes-plugin-scheduler Deployment (reverting to waggle/edge-scheduler:0.28.0) and
+# wes-plugin-scheduler Deployment (reverting to the original image recorded in the
+# backup by test-add-scheduler.sh) and
 # waits for it to come back healthy. Leaves the side-loaded image in containerd
 # (harmless; k3s ignores it once unreferenced). Safe to run repeatedly.
 set -euo pipefail
