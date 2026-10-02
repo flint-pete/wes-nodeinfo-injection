@@ -4,7 +4,7 @@ All notable changes to `wes-nodeinfo-injection`. Format loosely follows Keep a
 Changelog; this project uses semantic versioning. (Added in 1.0.1; the 1.0.0 entry is
 reconstructed from the `v1.0.0` tag message and git log.)
 
-## [Unreleased]
+## [1.1.0] - 2026-10-02
 
 ### Verified
 - **Tier 2 across a reboot (H039, Oct 2026).** The patched scheduler restarted on
