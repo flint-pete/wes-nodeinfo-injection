@@ -15,11 +15,13 @@
 #
 #   ./install-pluginctl-nodeinfo.sh            # build image if absent, install
 #   FORCE_BUILD=1 ./install-pluginctl-nodeinfo.sh
-#   DEST=/usr/local/bin/pluginctl-nodeinfo ./install-pluginctl-nodeinfo.sh  # (sudo install)
+#   DEST=/some/other/path ./install-pluginctl-nodeinfo.sh
 #
-# Use it exactly like pluginctl (same flags, still needs sudo for `run`):
-#   sudo ~/bin/pluginctl-nodeinfo run --name ... --selector zone=core ... <image> -- ...
-# Uninstall: rm ~/bin/pluginctl-nodeinfo   (the stock /usr/bin/pluginctl is never touched)
+# Default DEST is /usr/local/bin/pluginctl-nodeinfo: that dir is on sudo's secure_path,
+# so the command is simply (same flags as pluginctl; `run` needs sudo like pluginctl):
+#   sudo pluginctl-nodeinfo run --name ... --selector zone=core ... <image> -- ...
+# Uninstall: sudo rm /usr/local/bin/pluginctl-nodeinfo
+# (the stock /usr/bin/pluginctl is never touched)
 # Run ON the node. Requires: sudo podman (to build/read the image), git, network to docker.io.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -30,7 +32,7 @@ REPO="$(cd "$HERE/.." && pwd)"
 need podman
 TAG="${TAG:-localhost/edge-scheduler:nodeinfo-test}"
 SRC="${SCHEDULER_SRC:-$REPO/.upstream/edge-scheduler}"
-DEST="${DEST:-$HOME/bin/pluginctl-nodeinfo}"
+DEST="${DEST:-/usr/local/bin/pluginctl-nodeinfo}"
 INNER="/app/pluginctl-linux-arm64"
 [ "$(uname -m)" = "x86_64" ] && INNER="/app/pluginctl-linux-amd64"
 
@@ -41,13 +43,13 @@ else
   log "reusing existing image $TAG (FORCE_BUILD=1 to rebuild)"
 fi
 
-# 2. copy the patched pluginctl out of the image (no container is started).
-mkdir -p "$(dirname "$DEST")"
+# 2. copy the patched pluginctl out of the image (no container is started), then
+#    install it root-owned 0755 (like the stock /usr/bin/pluginctl).
+tmp="$(mktemp -d)"
 cid="$(sudo podman create "$TAG")"
-trap 'sudo podman rm "$cid" >/dev/null 2>&1 || true' EXIT
-sudo podman cp "$cid:$INNER" "$DEST" || fatal "could not copy $INNER out of $TAG"
-sudo chown "$(id -u):$(id -g)" "$DEST" 2>/dev/null || true
-chmod 0755 "$DEST"
+trap 'sudo podman rm "$cid" >/dev/null 2>&1 || true; sudo rm -rf "$tmp"' EXIT
+sudo podman cp "$cid:$INNER" "$tmp/pluginctl" || fatal "could not copy $INNER out of $TAG"
+sudo install -D -m 0755 -o root -g root "$tmp/pluginctl" "$DEST"
 
 # 3. verify: it runs on the host, and it carries the patch (stock binary does not).
 "$DEST" run --help >/dev/null 2>&1 || fatal "$DEST does not run on this host"
@@ -57,7 +59,8 @@ if ! kc -n "$NS_DEFAULT" get configmap "$IDENTITY_CM" -o jsonpath='{.data.WAGGLE
   warn "wes-identity has no GPS vars yet -- run ./test-add-configmap.sh (Tier 1) first"
 fi
 echo "-------------------------------------------------------------"
-log "launch plugins with:  sudo $DEST run ... (same flags as pluginctl)"
+CMD="$DEST"; [ "$(dirname "$DEST")" = /usr/local/bin ] && CMD="$(basename "$DEST")"
+log "launch plugins with:  sudo $CMD run ... (same flags as pluginctl)"
 log "verify a pod:  $KUBECTL get pod <name> -o jsonpath='{.spec.containers[0].envFrom}'"
 log "     -> [{\"configMapRef\":{\"name\":\"wes-identity\",\"optional\":true}}]"
-log "uninstall:  rm $DEST"
+log "uninstall:  sudo rm $DEST"
