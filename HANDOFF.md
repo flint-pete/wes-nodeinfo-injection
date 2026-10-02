@@ -112,7 +112,7 @@ Run Tier 1 before Tier 2 so the ConfigMap holds the vars. Tier 2 needs `sudo pod
 | `mobility` field absent from manifests | every node reports `mobility="unknown"` | correct-by-design (conservative); add the field (default `static`) to close it — see CI tasks |
 | Manifest GPS stale/wrong on a node | plugin gets bad coords | out of scope for this change; surfaced as-is. Mobile nodes should use live gpsd (pywaggle2 Tier-2 GPS via `WAGGLE_GPS_SERVER`, already injected), not this static env |
 | Explicit plugin env collides with an injected var | none | k8s applies `Env` over `EnvFrom` → explicit wins (verified) |
-| Host `pluginctl` builds pods client-side | `pluginctl run` pods show NO injection despite a patched scheduler (true for every pod in today's media stack) | ship a `pluginctl` rebuilt from the patched source alongside the scheduler (not done/tested here), OR schedule via the cloud/sesctl daemon path, OR pass identity explicitly (media-sampler3 uses `--vsn`). The scheduler daemon itself is always correct once patched |
+| Host `pluginctl` builds pods client-side | `pluginctl run` pods show NO injection despite a patched scheduler (true for every pod in today's media stack) | ship a `pluginctl` rebuilt from the patched source alongside the scheduler. Side-load form done and verified on H039 as Tier 1b (`node-test/install-pluginctl-nodeinfo.sh`; the patched scheduler image already contains it). OR schedule via the cloud/sesctl daemon path, OR pass identity explicitly (media-sampler3 uses `--vsn`). The scheduler daemon itself is always correct once patched |
 
 ## Folding into base CI
 

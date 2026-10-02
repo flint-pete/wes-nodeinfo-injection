@@ -101,7 +101,7 @@ git -C ../.upstream/edge-scheduler apply "$(realpath ../patches/0002-edge-schedu
 #     containerd, repoints the wes-plugin-scheduler Deployment; AUTO-REVERTS if the
 #     rollout doesn't go Ready
 
-# schedule any normal plugin (pluginctl/sesctl), then confirm injection:
+# schedule a plugin via SES (sesctl) - stock pluginctl pods don't count - then confirm injection:
 sudo kubectl get pod <plugin> -o jsonpath='{.spec.containers[0].envFrom}'
 #   → lists wes-identity ; the plugin's pywaggle2 now sees node-info
 
@@ -111,8 +111,9 @@ sudo kubectl get pod <plugin> -o jsonpath='{.spec.containers[0].envFrom}'
 
 Note: `pluginctl run` builds the pod client-side with the host `/usr/bin/pluginctl`'s
 own (unpatched) pod builder, so pluginctl-launched pods will NOT show injection —
-schedule via the patched scheduler daemon (cloud/sesctl), or use an explicit
-`envFrom`.
+schedule via the patched scheduler daemon (cloud/sesctl), use an explicit
+`envFrom`, or launch with the patched binary from `./install-pluginctl-nodeinfo.sh`
+(Tier 1b, `~/bin/pluginctl-nodeinfo`).
 
 ---
 

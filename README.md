@@ -55,21 +55,33 @@ scheduler daemon), so the single patch covers all scheduling paths.
 
 ## How this fits the media stack
 
-The two node-side tiers (`node-test/`) do different things:
+The node-side tiers (`node-test/`) do different things:
 
-- **Tier 1** — regenerate the `wes-identity` ConfigMap with all five vars. On its own
-  this **changes no running plugin**: nothing consumes `wes-identity` until a pod
+- **Tier 1** regenerates the `wes-identity` ConfigMap with all five vars. On its
+  own this **changes no running plugin**: nothing reads `wes-identity` until a pod
   gets an `envFrom` for it.
-- **Tier 2** — swap in the patched scheduler, which adds `envFrom: wes-identity` to
-  every pod *it* creates.
+- **Tier 1b** (recommended for hand-launched pods) installs a patched `pluginctl`
+  as `~/bin/pluginctl-nodeinfo`, using `install-pluginctl-nodeinfo.sh`. Pods it
+  launches get `envFrom: wes-identity`. It's one user-owned file and changes no
+  WES object.
+- **Tier 2** swaps in the patched scheduler, which adds `envFrom: wes-identity` to
+  every pod *it* creates (SES jobs).
 
-`pluginctl run` builds pods **client-side**, so pluginctl-launched pods never get the
-env, even with Tier 2. That is why the media stack does not depend on it: the producer
-(media-sampler3) is launched with `--vsn`; the consumers (sage-yolo2, sage-bioclip2)
-take identity from each frame's EXIF, with env as fallback / cross-check; and Beehive
-attaches the node's VSN to published data downstream anyway. Under `pluginctl` the
-reader returns all `None` (mobility `"unknown"`). No fleet manifest has a `mobility`
-field yet, so even with injection mobility is `"unknown"`.
+**Why Tier 1b exists.** The stock `pluginctl run` builds pods **client-side**,
+with its own unpatched copy of the pod builder. So its pods never get the env,
+even with Tier 2 installed. Patch 0002 is in that shared pod-builder code, so the
+Tier 2 build also produces a patched `pluginctl` (`/app/pluginctl-linux-arm64` in
+the image). Tier 1b just copies it out.
+
+On H039 (Oct 2026), the producer launched with it resolved VSN and GPS with no
+flags. The consumers then put the node's GPS on their crops and Beehive records
+(`location_source: node`). With the stock `pluginctl`, the reader returns all
+`None` (mobility `"unknown"`). The media stack still works that way: the producer
+gets `--vsn`, the consumers trust each frame's EXIF, and Beehive attaches the VSN
+downstream.
+
+No fleet manifest has a `mobility` field yet, so even with injection, mobility is
+`"unknown"`.
 
 Hub docs (media-sampler3): install guide
 [INSTALLING-MEDIA-SAMPLER3.md](https://github.com/flint-pete/media-sampler3/blob/master/INSTALLING-MEDIA-SAMPLER3.md) (Step 3 covers this
@@ -133,7 +145,7 @@ scheduler-change/            isolated Go module reproducing the container build 
 pywaggle2/node_info_env.py   byte-identical mirror of pywaggle2-nodeinfo's reader (for test_e2e.py)
 test_e2e.py                  7 tests: gen -> env -> pywaggle2 reader (full chain)
 patches/                     the two upstream diffs (the deliverable)
-node-test/                   side-load + restore scripts for a live node
+node-test/                   side-load + restore scripts for a live node (Tiers 1, 1b, 2)
 .upstream/                   upstream clones at the base commits, patched (gitignored; see above)
 docs/history/NOTES.md        verification history and design notes moved out of these docs
 VERSION, CHANGELOG.md        release history

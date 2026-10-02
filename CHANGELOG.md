@@ -6,6 +6,14 @@ reconstructed from the `v1.0.0` tag message and git log.)
 
 ## [Unreleased]
 
+- **Tier 1b:** `node-test/install-pluginctl-nodeinfo.sh` copies the patched `pluginctl`
+  out of the patched edge-scheduler image to `~/bin/pluginctl-nodeinfo`, so
+  hand-launched (`pluginctl run`) pods get `envFrom: wes-identity` like SES jobs. It
+  needs only Tier 1. Verified on H039: env injection, the `-e` override, `--env-from`
+  coexistence, and node GPS reaching the consumers' Beehive records.
+- The image build moved into `lib.sh` (`build_patched_scheduler_image`), shared by
+  Tier 1b and Tier 2 (`test-add-scheduler.sh`). The build steps are unchanged.
+
 - Tier-2 verification text (script + README) now says: SES job required, pods are in
   namespace `ses`, and pluginctl pods survive the scheduler's start-up clean-up
   (found during the H039 fresh-install run).
