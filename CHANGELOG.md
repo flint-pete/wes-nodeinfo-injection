@@ -6,6 +6,9 @@ reconstructed from the `v1.0.0` tag message and git log.)
 
 ## [1.0.1] - 2026-10-01
 
+- Comments and docs no longer describe the Sage ECR builder as broken; the
+  cyberinfrastructure team fixed Thor builds. Native podman build stays the test path.
+
 Student-readiness pass: docs corrected against the code, one safety fix in the node
 scripts. Patches (`patches/`) unchanged.
 

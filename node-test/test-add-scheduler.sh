@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # test-add-scheduler.sh -- TIER 2 (higher blast radius: replaces the control-plane
 # scheduler). Builds edge-scheduler WITH patch 0002 applied, side-loads it into k3s
-# containerd (podman build + k3s ctr import -- the ECR builder is broken, Infra #2),
+# containerd (podman build + k3s ctr import; the test image is never published),
 # and points the wes-plugin-scheduler Deployment at the side-loaded image. Then ANY
 # normally-scheduled plugin (no envFrom in its own spec) gets wes-identity injected.
 #
