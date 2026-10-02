@@ -81,8 +81,13 @@ startup "clean up all plugins" step only deletes pods in `ses`, so `pluginctl` p
 **After a reboot:** a side-loaded image usually survives, but not guaranteed. The
 Deployment patch *does* persist (k3s datastore), so if the image is gone the scheduler
 pod goes `ImagePullBackOff` — run `./test-remove-scheduler.sh` at once (restores the
-stock scheduler), or re-run `./test-add-scheduler.sh`. Tier 2 has never been tested
-across a reboot. Also check `wes-identity` still has the GPS/MOBILITY vars; if not,
+stock scheduler), or re-run `./test-add-scheduler.sh`. **Tested on H039 (Oct 2026):**
+the patched scheduler came back Running on its side-loaded image after a reboot,
+and the 5-var `wes-identity` survived. Then `./test-remove-scheduler.sh` restored
+`waggle/edge-scheduler:0.28.0` in about 1 minute, and the running `pluginctl` pods
+were untouched. Removing Tier 2 leaves `/usr/local/bin/pluginctl-nodeinfo` in place.
+Keep the root-podman image `localhost/edge-scheduler:nodeinfo-test`:
+`install-pluginctl-nodeinfo.sh` reuses it. The k3s copies can be pruned. Also check `wes-identity` still has the GPS/MOBILITY vars; if not,
 re-run `./test-add-configmap.sh` (idempotent). See `../TESTING.md` (R2, R8) and the
 hub [REBOOT-RECOVERY.md](https://github.com/flint-pete/media-sampler3/blob/master/REBOOT-RECOVERY.md).
 

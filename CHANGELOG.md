@@ -6,6 +6,11 @@ reconstructed from the `v1.0.0` tag message and git log.)
 
 ## [Unreleased]
 
+### Verified
+- **Tier 2 across a reboot (H039, Oct 2026).** The patched scheduler restarted on
+  its side-loaded image and the ConfigMap kept its 5 vars. `test-remove-scheduler.sh`
+  then restored the stock 0.28.0 scheduler without disturbing the `pluginctl` pods.
+
 - `install-pluginctl-nodeinfo.sh` now installs to `/usr/local/bin/pluginctl-nodeinfo`
   by default. That's on sudo's `secure_path`, so the command is `sudo pluginctl-nodeinfo run`.
   It's root-owned 0755, like the stock pluginctl.
