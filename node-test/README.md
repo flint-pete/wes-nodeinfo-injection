@@ -38,8 +38,8 @@ git -C ../.upstream/edge-scheduler apply "$(realpath ../patches/0002-edge-schedu
 ./test-add-scheduler.sh      # podman-build patched scheduler, k3s-import, repoint the
                              # wes-plugin-scheduler Deployment (auto-reverts if the
                              # rollout doesn't go Ready)
-# schedule any normal plugin, then:
-#   sudo kubectl get pod <plugin> -o jsonpath='{.spec.containers[0].envFrom}'  # -> wes-identity
+# run an SES job on this node (sesctl via the cloud; pluginctl pods don't count), then:
+#   $KUBECTL get pod -n ses <plugin> -o jsonpath='{.spec.containers[0].envFrom}'  # -> wes-identity
 ./test-remove-scheduler.sh   # restore original scheduler image
 ```
 
@@ -54,6 +54,9 @@ compiles inside the container — **no host Go** is needed on the node.
 client-side with its own (unpatched) pod builder, so only pods created by the patched
 scheduler daemon (jobs via cloud/sesctl) get `envFrom: wes-identity`. To see Tier 2
 work, schedule a job, or give the pod an explicit `envFrom` (as the Tier-1 pod does).
+Scheduler-launched pods run in the **`ses`** namespace (use `-n ses`). The scheduler's
+startup "clean up all plugins" step only deletes pods in `ses`, so `pluginctl` pods in
+`default` survive a Tier-2 rollout (observed on H039).
 
 **After a reboot:** a side-loaded image usually survives, but not guaranteed. The
 Deployment patch *does* persist (k3s datastore), so if the image is gone the scheduler

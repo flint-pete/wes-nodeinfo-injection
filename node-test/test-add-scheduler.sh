@@ -79,7 +79,8 @@ if ! kc -n "$NS_DEFAULT" rollout status "deployment/$SCHED_DEPLOY" --timeout=120
 fi
 log "patched scheduler is running."
 echo "-------------------------------------------------------------"
-log "now schedule any normal plugin (e.g. via pluginctl/sesctl) WITHOUT envFrom in"
-log "its spec, then check it gets wes-identity injected:"
-log "  $KUBECTL get pod <plugin> -o jsonpath='{.spec.containers[0].envFrom}'"
+log "now run an SES job on this node (sesctl, via the cloud). pluginctl pods do NOT"
+log "count: pluginctl builds its pods itself. Scheduler pods live in namespace ses:"
+log "  $KUBECTL get pods -n ses"
+log "  $KUBECTL get pod -n ses <plugin> -o jsonpath='{.spec.containers[0].envFrom}'"
 log "when done:  ./test-remove-scheduler.sh"

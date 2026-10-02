@@ -4,6 +4,12 @@ All notable changes to `wes-nodeinfo-injection`. Format loosely follows Keep a
 Changelog; this project uses semantic versioning. (Added in 1.0.1; the 1.0.0 entry is
 reconstructed from the `v1.0.0` tag message and git log.)
 
+## [Unreleased]
+
+- Tier-2 verification text (script + README) now says: SES job required, pods are in
+  namespace `ses`, and pluginctl pods survive the scheduler's start-up clean-up
+  (found during the H039 fresh-install run).
+
 ## [1.0.1] - 2026-10-01
 
 - Comments and docs no longer describe the Sage ECR builder as broken; the
