@@ -60,9 +60,9 @@ The node-side tiers (`node-test/`) do different things:
 - **Tier 1** regenerates the `wes-identity` ConfigMap with all five vars. On its
   own this **changes no running plugin**: nothing reads `wes-identity` until a pod
   gets an `envFrom` for it.
-- **Tier 1b** (recommended for hand-launched pods) installs a patched `pluginctl`
-  as `~/bin/pluginctl-nodeinfo`, using `install-pluginctl-nodeinfo.sh`. Pods it
-  launches get `envFrom: wes-identity`. It's one user-owned file and changes no
+- **Tier 1b** (what the media-stack install guide uses) installs a patched `pluginctl`
+  as `/usr/local/bin/pluginctl-nodeinfo`, using `install-pluginctl-nodeinfo.sh`. Pods it
+  launches get `envFrom: wes-identity`. It's one file (root-owned, on sudo's PATH) and changes no
   WES object.
 - **Tier 2** swaps in the patched scheduler, which adds `envFrom: wes-identity` to
   every pod *it* creates (SES jobs).
@@ -84,7 +84,7 @@ No fleet manifest has a `mobility` field yet, so even with injection, mobility i
 `"unknown"`.
 
 Hub docs (media-sampler3): install guide
-[INSTALLING-MEDIA-SAMPLER3.md](https://github.com/flint-pete/media-sampler3/blob/master/INSTALLING-MEDIA-SAMPLER3.md) (Step 3 covers this
+[INSTALLING-MEDIA-SAMPLER3.md](https://github.com/flint-pete/media-sampler3/blob/master/INSTALLING-MEDIA-SAMPLER3.md) (Steps 2–3 cover this
 repo), [REBOOT-RECOVERY.md](https://github.com/flint-pete/media-sampler3/blob/master/REBOOT-RECOVERY.md) (what to re-check after a reboot),
 [docs/HOW-IT-WORKS.md](https://github.com/flint-pete/media-sampler3/blob/master/docs/HOW-IT-WORKS.md) (data flow and ownership). The reader
 lives in [pywaggle2-nodeinfo](https://github.com/flint-pete/pywaggle2-nodeinfo).

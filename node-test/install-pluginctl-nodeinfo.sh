@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# install-pluginctl-nodeinfo.sh -- TIER 1b (low blast radius: installs ONE user-owned
+# install-pluginctl-nodeinfo.sh -- TIER 1b (low blast radius: installs ONE
 # file; touches no WES object). Installs a PATCHED pluginctl next to the stock one, so
 # pods you launch by hand get `envFrom: wes-identity` -- the same 5 WAGGLE_NODE_* vars
 # (VSN, node id, GPS lat/lon, mobility) that SES jobs get from the Tier 2 scheduler.

@@ -26,19 +26,19 @@ Existing plugins are untouched (they don't consume `wes-identity` until Tier 2).
 ./test-remove-configmap.sh   # restore original wes-identity; delete the pod
 ```
 
-## Tier 1b — patched pluginctl (one user-owned file; recommended for `pluginctl run`)
+## Tier 1b — patched pluginctl (one file; the media stack's launch path)
 
 The stock `/usr/bin/pluginctl` builds pods client-side, without patch 0002, so its pods
 never get `wes-identity`. The patched edge-scheduler image contains a patched pluginctl
-(same pod-builder code). This copies it to `~/bin/pluginctl-nodeinfo`. It needs Tier 1,
+(same pod-builder code). This copies it to `/usr/local/bin/pluginctl-nodeinfo`. It needs Tier 1,
 but not the Tier 2 Deployment change:
 
 ```bash
 # prereq: .upstream/edge-scheduler at 5391a00 with patch 0002 applied (as for Tier 2)
 ./install-pluginctl-nodeinfo.sh   # reuses the Tier 2 image if present, else builds it (~3 min)
-sudo ~/bin/pluginctl-nodeinfo run --name <n> --selector zone=core <image> -- <args>
+sudo pluginctl-nodeinfo run --name <n> --selector zone=core <image> -- <args>
 $KUBECTL get pod <n> -o jsonpath='{.spec.containers[0].envFrom}'   # -> wes-identity
-rm ~/bin/pluginctl-nodeinfo       # uninstall (the stock binary is never touched)
+sudo rm /usr/local/bin/pluginctl-nodeinfo   # uninstall (the stock binary is never touched)
 ```
 
 Verified on H039. A pod from this binary had all 5 vars. `-e WAGGLE_NODE_VSN=X`
@@ -93,7 +93,7 @@ lib.sh                    shared: kubectl wrapper, one-shot backup/restore, node
 test-add-configmap.sh     Tier 1 up
 test-remove-configmap.sh  Tier 1 down
 test-plugin-pod.yaml      Tier 1 pywaggle2 reader pod (explicit envFrom)
-install-pluginctl-nodeinfo.sh  Tier 1b: patched pluginctl -> ~/bin/pluginctl-nodeinfo
+install-pluginctl-nodeinfo.sh  Tier 1b: patched pluginctl -> /usr/local/bin/pluginctl-nodeinfo
 test-add-scheduler.sh     Tier 2 up (build + side-load + patch Deployment)
 test-remove-scheduler.sh  Tier 2 down (restore Deployment)
 ```

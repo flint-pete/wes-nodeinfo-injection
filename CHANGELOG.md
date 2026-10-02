@@ -6,8 +6,12 @@ reconstructed from the `v1.0.0` tag message and git log.)
 
 ## [Unreleased]
 
+- `install-pluginctl-nodeinfo.sh` now installs to `/usr/local/bin/pluginctl-nodeinfo`
+  by default. That's on sudo's `secure_path`, so the command is `sudo pluginctl-nodeinfo run`.
+  It's root-owned 0755, like the stock pluginctl.
+
 - **Tier 1b:** `node-test/install-pluginctl-nodeinfo.sh` copies the patched `pluginctl`
-  out of the patched edge-scheduler image to `~/bin/pluginctl-nodeinfo`, so
+  out of the patched edge-scheduler image to `/usr/local/bin/pluginctl-nodeinfo`, so
   hand-launched (`pluginctl run`) pods get `envFrom: wes-identity` like SES jobs. It
   needs only Tier 1. Verified on H039: env injection, the `-e` override, `--env-from`
   coexistence, and node GPS reaching the consumers' Beehive records.

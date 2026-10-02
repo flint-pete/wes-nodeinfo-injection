@@ -113,7 +113,7 @@ Note: `pluginctl run` builds the pod client-side with the host `/usr/bin/pluginc
 own (unpatched) pod builder, so pluginctl-launched pods will NOT show injection —
 schedule via the patched scheduler daemon (cloud/sesctl), use an explicit
 `envFrom`, or launch with the patched binary from `./install-pluginctl-nodeinfo.sh`
-(Tier 1b, `~/bin/pluginctl-nodeinfo`).
+(Tier 1b, `/usr/local/bin/pluginctl-nodeinfo`).
 
 ---
 
