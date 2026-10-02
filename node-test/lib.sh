@@ -111,3 +111,31 @@ kc_yaml2json() {  # $1 = path to yaml
 }
 
 node_vsn() { awk '{print toupper($0)}' "$WAGGLE_CONFIG_DIR/vsn" 2>/dev/null || echo "?"; }
+
+# Build the PATCHED edge-scheduler image (patch 0002) with podman, natively.
+# Shared by test-add-scheduler.sh (Tier 2) and install-pluginctl-nodeinfo.sh (Tier 1b):
+# one build produces BOTH the patched scheduler daemon and a patched pluginctl.
+# Notes learned on H00F: (a) build needs root here (sudo podman); (b) this node's
+# /etc/containers/registries.conf defines no unqualified-search registries, so the
+# Dockerfile's bare `FROM waggle/plugin-base` won't resolve -- fully-qualify it to
+# docker.io in a throwaway Dockerfile so we never dirty the packaged (patched) one;
+# (c) the multi-stage Dockerfile compiles Go INSIDE the container, so no host Go is
+# needed, but it DOES require --build-arg TARGETARCH and VERSION.
+build_patched_scheduler_image() {  # $1=source dir  $2=image tag
+  local src="$1" tag="$2" arch targetarch
+  [ -d "$src" ] || fatal "edge-scheduler source not found at $src (see README: populate .upstream/)"
+  grep -q 'wes-identity' "$src/pkg/nodescheduler/resourcemanager.go" \
+    || fatal "patch 0002 not applied in $src -- run: git -C $src apply \"\$(realpath ../patches/0002-edge-scheduler-envfrom-wes-identity.patch)\""
+  log "patch 0002 confirmed present in scheduler source"
+  arch="$(uname -m)"
+  case "$arch" in aarch64|arm64) targetarch=arm64;; x86_64|amd64) targetarch=amd64;; *) fatal "unsupported arch $arch";; esac
+  log "building $tag (podman, native, TARGETARCH=$targetarch) ..."
+  (
+    cd "$src"
+    sed 's|^FROM waggle/plugin-base|FROM docker.io/waggle/plugin-base|' Dockerfile > Dockerfile.nodeinfo-build
+    trap 'rm -f Dockerfile.nodeinfo-build' EXIT
+    sudo podman build -f Dockerfile.nodeinfo-build \
+      --build-arg TARGETARCH="$targetarch" --build-arg VERSION=nodeinfo-test \
+      -t "$tag" .
+  ) || fatal "podman build failed"
+}

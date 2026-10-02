@@ -22,8 +22,6 @@ TAG="${TAG:-localhost/edge-scheduler:nodeinfo-test}"
 K3S_TAG="docker.io/library/edge-scheduler:nodeinfo-test"
 SRC="${SCHEDULER_SRC:-$REPO/.upstream/edge-scheduler}"
 
-[ -d "$SRC" ] || fatal "edge-scheduler source not found at $SRC (see README: populate .upstream/)"
-
 # 0a. pre-flight: confirm the scheduler Deployment name is what we expect on THIS node.
 # Node deployments can vary (wes-plugin-scheduler vs edge-scheduler vs ...); fail fast
 # with the actual candidates rather than mid-rollout on a name mismatch.
@@ -35,29 +33,9 @@ if ! kc -n "$NS_DEFAULT" get deployment "$SCHED_DEPLOY" >/dev/null 2>&1; then
 fi
 log "scheduler Deployment confirmed: $SCHED_DEPLOY"
 
-# 0. sanity: is patch 0002 actually applied in $SRC? (grep for our marker)
-if ! grep -q 'wes-identity' "$SRC/pkg/nodescheduler/resourcemanager.go"; then
-  fatal "patch 0002 not applied in $SRC -- run: git -C $SRC apply $REPO/patches/0002-*.patch"
-fi
-log "patch 0002 confirmed present in scheduler source"
-
-# 1. build the patched scheduler image natively (podman; RUN works on-node).
-# Notes learned on H00F: (a) build needs root here (sudo podman); (b) this node's
-# /etc/containers/registries.conf defines no unqualified-search registries, so the
-# Dockerfile's bare `FROM waggle/plugin-base` won't resolve -- fully-qualify it to
-# docker.io in a throwaway Dockerfile so we never dirty the packaged (patched) one;
-# (c) the multi-stage Dockerfile compiles Go INSIDE the container, so no host Go is
-# needed, but it DOES require --build-arg TARGETARCH and VERSION.
-ARCH="$(uname -m)"; case "$ARCH" in aarch64|arm64) TARGETARCH=arm64;; x86_64|amd64) TARGETARCH=amd64;; *) fatal "unsupported arch $ARCH";; esac
-log "building $TAG (podman, native, TARGETARCH=$TARGETARCH) ..."
-(
-  cd "$SRC"
-  sed 's|^FROM waggle/plugin-base|FROM docker.io/waggle/plugin-base|' Dockerfile > Dockerfile.nodeinfo-build
-  trap 'rm -f Dockerfile.nodeinfo-build' EXIT
-  sudo podman build -f Dockerfile.nodeinfo-build \
-    --build-arg TARGETARCH="$TARGETARCH" --build-arg VERSION=nodeinfo-test \
-    -t "$TAG" .
-) || fatal "podman build failed"
+# 1. build the patched scheduler image (shared helper in lib.sh; also used by
+#    install-pluginctl-nodeinfo.sh -- the same image carries a patched pluginctl).
+build_patched_scheduler_image "$SRC" "$TAG"
 
 # 2. import into k3s containerd (separate store from podman)
 log "importing image into k3s containerd ..."
@@ -83,4 +61,6 @@ log "now run an SES job on this node (sesctl, via the cloud). pluginctl pods do 
 log "count: pluginctl builds its pods itself. Scheduler pods live in namespace ses:"
 log "  $KUBECTL get pods -n ses"
 log "  $KUBECTL get pod -n ses <plugin> -o jsonpath='{.spec.containers[0].envFrom}'"
+log "tip: the same image holds a patched pluginctl; ./install-pluginctl-nodeinfo.sh"
+log "     installs it, so pluginctl pods get wes-identity too (no SES job needed)."
 log "when done:  ./test-remove-scheduler.sh"
