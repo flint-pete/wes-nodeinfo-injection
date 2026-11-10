@@ -4,6 +4,13 @@ All notable changes to `wes-nodeinfo-injection`. Format loosely follows Keep a
 Changelog; this project uses semantic versioning. (Added in 1.0.1; the 1.0.0 entry is
 reconstructed from the `v1.0.0` tag message and git log.)
 
+## [1.1.1] - 2026-11-10
+
+- Archived: merged upstream as waggle-edge-stack 697e338 + edge-scheduler 0.29.2
+  (Nov 2026). README/HANDOFF banner: what landed, how it differs (`""` not `999`,
+  no mobility), and the patch-0001 correction (it missed the ConfigMap heredoc and
+  kustomize literals). Docs only.
+
 ## [1.1.0] - 2026-10-02
 
 ### Verified

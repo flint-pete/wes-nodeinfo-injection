@@ -1,5 +1,18 @@
 # HANDOFF — wes-nodeinfo-injection (for the Sage CI team)
 
+> **ARCHIVED, merged upstream (Nov 2026).** The Sage CI team merged this work:
+> waggle-edge-stack 697e338 publishes `WAGGLE_NODE_{ID,VSN,GPS_LAT,GPS_LON}` in
+> `wes-identity`, and edge-scheduler/pluginctl 0.29.2 adds `envFrom: wes-identity`
+> to every plugin pod (identical to patch 0002, so `pluginctl run` pods get it too).
+> On a node running that WES, **Tiers 1, 1b and 2 here are obsolete**; remove
+> `/usr/local/bin/pluginctl-nodeinfo` if present. Differences from our patches:
+> missing coords are `""` (not `999`), and there is no `WAGGLE_NODE_MOBILITY`.
+> **Correction:** our patch 0001 only edited `configs/wes-identity.env`; the plain
+> `wes-identity` ConfigMap plugins read comes from a `kubectl apply` heredoc and the
+> kustomize literals, which upstream updated and we had missed (our live tests built
+> the ConfigMap directly). Kept for history; `node-test/test-remove-scheduler.sh`
+> stays useful for undoing an old Tier 2 install.
+
 The WES ("Part B") change that feeds pywaggle2's node-identity reader
 (`read_node_info()`; a `Plugin.get_node_info()` wrapper is the proposed future
 upstream API). Delivered as two patches against upstream, verified end-to-end on
